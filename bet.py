@@ -2,8 +2,8 @@ import random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
-from config import GRID_SIZE, DELETE_TIMER
-from database import get_balance, update_balance, users_col, check_registered
+from config import GRID_SIZE
+from database import get_balance, update_balance, check_registered
 
 # --- GAME CONFIGS ---
 active_games = {} 
@@ -15,11 +15,6 @@ BOMB_CONFIG = {
     10: [2.50, 4.50, 9.00, 18.0, 40.0, 80.0]                                   
 }
 
-async def delete_job(context):
-    """Message delete helper"""
-    try: await context.bot.delete_message(context.job.chat_id, context.job.data)
-    except: pass
-
 # --- COMMAND: /bet ---
 async def bet_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -30,40 +25,40 @@ async def bet_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"🛑 **Register First!**", reply_markup=InlineKeyboardMarkup(kb), quote=True)
         return
 
-    # 2. Cleanup Old Message
-    try: await update.message.delete()
-    except: pass 
+    # ⚠️ FIX: Message Delete hata diya taaki Quote reply kaam kare
+    # try: await update.message.delete()
+    # except: pass 
     
-    # 3. Argument Check
+    # 2. Argument Check
     try: bet_amount = int(context.args[0])
     except: 
-        msg = await update.message.reply_text("⚠️ **Format:** `/bet 100`", parse_mode=ParseMode.MARKDOWN, quote=True)
-        context.job_queue.run_once(delete_job, 5, chat_id=msg.chat_id, data=msg.message_id)
+        await update.message.reply_text("⚠️ **Format:** `/bet 100`", parse_mode=ParseMode.MARKDOWN, quote=True)
         return
         
-    # 4. Balance Check
+    # 3. Balance Check
     if get_balance(user.id) < bet_amount: 
-        msg = await update.message.reply_text("❌ **Low Balance!**", quote=True)
-        context.job_queue.run_once(delete_job, 5, chat_id=msg.chat_id, data=msg.message_id)
+        await update.message.reply_text("❌ **Low Balance!**", quote=True)
         return
     
     if bet_amount < 10:
-        msg = await update.message.reply_text("❌ Minimum Bet ₹10 hai!", quote=True)
-        context.job_queue.run_once(delete_job, 5, chat_id=msg.chat_id, data=msg.message_id)
+        await update.message.reply_text("❌ Minimum Bet ₹10 hai!", quote=True)
         return
 
-    # 5. Menu Logic
+    # 4. Menu Logic
     kb = [
         [InlineKeyboardButton("🟢 1 Bomb", callback_data=f"set_1_{bet_amount}_{user.id}"), InlineKeyboardButton("🟡 3 Bombs", callback_data=f"set_3_{bet_amount}_{user.id}")],
         [InlineKeyboardButton("🔴 5 Bombs", callback_data=f"set_5_{bet_amount}_{user.id}"), InlineKeyboardButton("💀 10 Bombs", callback_data=f"set_10_{bet_amount}_{user.id}")],
         [InlineKeyboardButton("❌ Cancel", callback_data=f"close_{user.id}")]
     ]
+    
+    # Quote=True ab 100% kaam karega kyunki message delete nahi hua
     await update.message.reply_text(
         f"🎮 **Game Setup ({user.first_name})**\n"
         f"💰 Bet Amount: ₹{bet_amount}\n"
         f"💣 Select Difficulty 👇", 
         reply_markup=InlineKeyboardMarkup(kb), 
-        parse_mode=ParseMode.MARKDOWN
+        parse_mode=ParseMode.MARKDOWN,
+        quote=True
     )
 
 # --- CALLBACK HANDLER (Game Logic) ---
@@ -83,13 +78,11 @@ async def bet_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         mines = int(parts[1]); bet = int(parts[2])
         
-        # Re-check Balance
         if get_balance(owner) < bet: 
             await q.answer("Balance khatam ho gaya!", show_alert=True)
             await q.message.delete()
             return
             
-        # Deduct Money & Start
         update_balance(owner, -bet)
         
         grid = [0]*(GRID_SIZE**2)
@@ -136,14 +129,12 @@ async def bet_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             game["rev"].append(idx)
             mults = BOMB_CONFIG[game["mines"]]
             
-            # Check Win Condition (All Safe Tiles Found)
             if len(game["rev"]) == (16 - game["mines"]):
                 win = int(game["bet"] * mults[-1])
                 update_balance(owner, win)
                 del active_games[f"{owner}"]
                 await q.edit_message_text(f"👑 **JACKPOT! WON ₹{win}**", parse_mode=ParseMode.MARKDOWN)
             else:
-                # Update Grid
                 kb = []
                 for r in range(4):
                     row = []
@@ -190,4 +181,4 @@ async def bet_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.message.delete()
         
     if act == "noop": await q.answer("Ye khul chuka hai!", show_alert=False)
-      
+                    
