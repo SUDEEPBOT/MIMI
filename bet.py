@@ -15,43 +15,54 @@ BOMB_CONFIG = {
     10: [2.50, 4.50, 9.00, 18.0, 40.0, 80.0]                                   
 }
 
+# --- HELPER: AUTO DELETE ---
+async def delete_msg(context: ContextTypes.DEFAULT_TYPE):
+    """Faltu messages delete karega"""
+    try: await context.bot.delete_message(context.job.chat_id, context.job.data)
+    except: pass
+
 # --- COMMAND: /bet ---
 async def bet_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    chat_id = update.effective_chat.id
     
-    # 1. Register Check
-    if not check_registered(user.id):
-        kb = [[InlineKeyboardButton("📝 Register", callback_data=f"reg_start_{user.id}")]]
-        await update.message.reply_text(f"🛑 **Register First!**", reply_markup=InlineKeyboardMarkup(kb))
-        return
-
-    # Group me crash nahi hoga (Try-Except)
+    # 1. Clean User Command (Agar Admin hai to delete karega)
     try: await update.message.delete()
     except: pass 
+
+    # 2. Register Check
+    if not check_registered(user.id):
+        kb = [[InlineKeyboardButton("📝 Register", callback_data=f"reg_start_{user.id}")]]
+        msg = await update.message.reply_text(f"🛑 **{user.first_name}, Register First!**", reply_markup=InlineKeyboardMarkup(kb))
+        # 10 Sec baad delete
+        context.job_queue.run_once(delete_msg, 10, chat_id=chat_id, data=msg.message_id)
+        return
     
-    # 2. Argument Check
+    # 3. Argument Check
     try: bet_amount = int(context.args[0])
     except: 
-        await update.message.reply_text("⚠️ **Format:** `/bet 100`", parse_mode=ParseMode.MARKDOWN)
+        msg = await update.message.reply_text("⚠️ **Format:** `/bet 100`", parse_mode=ParseMode.MARKDOWN)
+        context.job_queue.run_once(delete_msg, 5, chat_id=chat_id, data=msg.message_id)
         return
         
-    # 3. Balance Check
+    # 4. Balance Check
     if get_balance(user.id) < bet_amount: 
-        await update.message.reply_text("❌ **Low Balance!**")
+        msg = await update.message.reply_text(f"❌ **Low Balance!** {user.first_name}, paisa nahi hai.", parse_mode=ParseMode.MARKDOWN)
+        context.job_queue.run_once(delete_msg, 5, chat_id=chat_id, data=msg.message_id)
         return
     
     if bet_amount < 10:
-        await update.message.reply_text("❌ Minimum Bet ₹10 hai!")
+        msg = await update.message.reply_text("❌ Minimum Bet ₹10 hai!")
+        context.job_queue.run_once(delete_msg, 5, chat_id=chat_id, data=msg.message_id)
         return
 
-    # 4. Menu Logic
+    # 5. Menu Logic
     kb = [
         [InlineKeyboardButton("🟢 1 Bomb", callback_data=f"set_1_{bet_amount}_{user.id}"), InlineKeyboardButton("🟡 3 Bombs", callback_data=f"set_3_{bet_amount}_{user.id}")],
         [InlineKeyboardButton("🔴 5 Bombs", callback_data=f"set_5_{bet_amount}_{user.id}"), InlineKeyboardButton("💀 10 Bombs", callback_data=f"set_10_{bet_amount}_{user.id}")],
         [InlineKeyboardButton("❌ Cancel", callback_data=f"close_{user.id}")]
     ]
     
-    # Note: reply_text automatically quotes the message
     await update.message.reply_text(
         f"🎮 **Game Setup ({user.first_name})**\n"
         f"💰 Bet Amount: ₹{bet_amount}\n"
@@ -121,7 +132,8 @@ async def bet_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # BOMB LOGIC
         if game["grid"][idx] == 1:
             del active_games[f"{owner}"]
-            await q.edit_message_text(f"💥 **BOOM!** Lost ₹{game['bet']}", parse_mode=ParseMode.MARKDOWN)
+            # User ka naam dikhayega taaki pata chale kisne haara
+            await q.edit_message_text(f"💥 **BOOM!**\n👤 {update.effective_user.first_name}\n📉 Lost: ₹{game['bet']}", parse_mode=ParseMode.MARKDOWN)
         
         # SAFE LOGIC
         else:
@@ -132,7 +144,7 @@ async def bet_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 win = int(game["bet"] * mults[-1])
                 update_balance(owner, win)
                 del active_games[f"{owner}"]
-                await q.edit_message_text(f"👑 **JACKPOT! WON ₹{win}**", parse_mode=ParseMode.MARKDOWN)
+                await q.edit_message_text(f"👑 **JACKPOT! WON ₹{win}**\n👤 {update.effective_user.first_name}", parse_mode=ParseMode.MARKDOWN)
             else:
                 kb = []
                 for r in range(4):
@@ -171,7 +183,7 @@ async def bet_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         update_balance(owner, win)
         del active_games[f"{owner}"]
         
-        await q.edit_message_text(f"💰 **Cashed Out: ₹{win}**", parse_mode=ParseMode.MARKDOWN)
+        await q.edit_message_text(f"💰 **Cashed Out: ₹{win}**\n👤 {update.effective_user.first_name}", parse_mode=ParseMode.MARKDOWN)
 
     # --- 4. CLOSE / NOOP ---
     if act == "close": 
@@ -180,4 +192,4 @@ async def bet_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.message.delete()
         
     if act == "noop": await q.answer("Ye khul chuka hai!", show_alert=False)
-        
+    
