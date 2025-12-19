@@ -1,10 +1,14 @@
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 from config import OWNER_ID
-from database import users_col, codes_col, update_balance, add_api_key, remove_api_key, get_all_keys
+from database import (
+    users_col, codes_col, update_balance, 
+    add_api_key, remove_api_key, get_all_keys,
+    wipe_database, set_economy_status, get_economy_status # <-- New Imports
+)
 
-# --- EXISTING COMMANDS ---
+# --- BROADCAST & MONEY COMMANDS ---
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID: return
@@ -37,7 +41,7 @@ async def add_money(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try: 
         update_balance(int(context.args[0]), int(context.args[1]))
         await update.message.reply_text("✅ Money Added")
-    except: await update.message.reply_text("⚠️ Usage: `/add <user_id> <amount>`") # <-- Error Added
+    except: await update.message.reply_text("⚠️ Usage: `/add <user_id> <amount>`")
 
 async def take_money(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID: return
@@ -46,35 +50,30 @@ async def take_money(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ Money Taken")
     except: await update.message.reply_text("⚠️ Usage: `/take <user_id> <amount>`")
 
-# --- 🔥 API KEY COMMANDS ---
+# --- API KEY COMMANDS ---
 
 async def add_key_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID: return
-    
     try:
         new_key = context.args[0]
         if add_api_key(new_key):
             await update.message.reply_text("✅ **API Key Added!**", parse_mode=ParseMode.MARKDOWN)
         else:
-            await update.message.reply_text("⚠️ Ye Key pehle se added hai!")
+            await update.message.reply_text("⚠️ Key already exists!")
     except:
-        await update.message.reply_text("⚠️ Usage: `/addkey <AIzaSy...>`")
-    
+        await update.message.reply_text("⚠️ Usage: `/addkey <Key>`")
     try: await update.message.delete()
     except: pass
 
 async def remove_key_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID: return
-    
     try:
-        key_to_remove = context.args[0]
-        if remove_api_key(key_to_remove):
+        if remove_api_key(context.args[0]):
             await update.message.reply_text("🗑 **API Key Removed!**", parse_mode=ParseMode.MARKDOWN)
         else:
-            await update.message.reply_text("❌ Ye Key database me nahi mili.")
+            await update.message.reply_text("❌ Key not found.")
     except:
-        await update.message.reply_text("⚠️ Usage: `/delkey <AIzaSy...>`")
-    
+        await update.message.reply_text("⚠️ Usage: `/delkey <Key>`")
     try: await update.message.delete()
     except: pass
 
@@ -82,4 +81,47 @@ async def list_keys_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID: return
     keys = get_all_keys()
     await update.message.reply_text(f"🔑 **Total Active API Keys:** `{len(keys)}`", parse_mode=ParseMode.MARKDOWN)
+
+# --- 🔥 NEW: ECONOMY & RESET ---
+
+async def economy_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Economy ON/OFF switch"""
+    if update.effective_user.id != OWNER_ID: return
     
+    current = get_economy_status()
+    new_status = not current
+    set_economy_status(new_status)
+    
+    status_text = "🟢 **ON**" if new_status else "🔴 **OFF**"
+    await update.message.reply_text(f"⚙️ **Economy System:** {status_text}", parse_mode=ParseMode.MARKDOWN)
+
+async def reset_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Database Wipe Warning"""
+    if update.effective_user.id != OWNER_ID: return
+    
+    keyboard = [
+        [InlineKeyboardButton("⚠️ YES, WIPE DATA", callback_data="confirm_wipe")],
+        [InlineKeyboardButton("❌ CANCEL", callback_data="cancel_wipe")]
+    ]
+    
+    await update.message.reply_text(
+        "☢️ **WARNING: DATABASE RESET** ☢️\n\n"
+        "Kya aap sach me saare Users, Money aur Investments delete karna chahte hain?\n"
+        "**Ye action undo nahi ho sakta!**",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+async def reset_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle Reset Buttons"""
+    query = update.callback_query
+    if query.from_user.id != OWNER_ID: 
+        await query.answer("Sirf Owner kar sakta hai!", show_alert=True); return
+
+    if query.data == "confirm_wipe":
+        wipe_database()
+        await query.edit_message_text("💀 **DATABASE WIPED SUCCESSFULLY!**\nSab Zero ho gaye.")
+    
+    elif query.data == "cancel_wipe":
+        await query.message.delete()
+                    
