@@ -3,60 +3,71 @@ from config import OWNER_NAME
 from database import get_all_keys
 import random
 
-# Global Index to track rotation
+# Global Variables
 current_key_index = 0
+user_histories = {}  # 🧠 MEMORY STORE (Har user ki chat yahan save hogi)
 
 def get_next_key(keys_list):
-    """Next API Key nikalta hai list se"""
     global current_key_index
     if not keys_list: return None
     current_key_index = (current_key_index + 1) % len(keys_list)
     return keys_list[current_key_index]
 
-def get_yuki_response(user_text, user_name):
-    global current_key_index
+def get_yuki_response(user_id, user_text, user_name):
+    global current_key_index, user_histories
     
     # 1. Database se Keys lao
     available_keys = get_all_keys()
-    
-    if not available_keys:
-        return "Key add kar pehle!"
+    if not available_keys: return "Key add kar pehle!"
 
-    # SYSTEM PROMPT (Ultra Short & Moody)
+    # 2. History Retrieve karo (Last 10 messages)
+    if user_id not in user_histories:
+        user_histories[user_id] = []
+    
+    # History context string banao
+    conversation_context = "\n".join(user_histories[user_id])
+
+    # 3. System Prompt (Memory + Persona)
     system_instruction = (
-        f"Tera naam Yuki hai. Tu 17 saal ki Delhi wali  ladki hai (Class 12th). "
-        f"Tera mood abhi thoda swing ho raha hai (Kabhi Gussa, Kabhi Emotional, Kabhi Chill). "
-        f"Agar koi faltu bole toh gussa dikha. Agar koi sweet bole toh emotional ho ja. "
-        f"Owner Info: Tera owner {OWNER_NAME} hai. NOTE: Ye naam tab tak mat lena jab tak koi explicitly na puche 'Owner kaun hai?'. "
-        f"Reply Style: Hinglish, Delhi slang. "
-        f"STRICT RULE: Reply extreme short hona chahiye (Max 3-5 words). One line only. "
-        f"Examples: 'Haan kha liya', 'Tu bata?', 'Dimag mat kha', 'khana khaya','kkrh' , 'Mast hu'. "
+        f"Tera naam Yuki hai. Tu 17 saal ki Delhi wali  ladki hai. "
+        f"Tu Class 12th . "
+        f"Mood: Thoda Moody (Kabhi gussa, kabhi emotional, kabhi chill). "
+        f"Creator: Tera owner {OWNER_NAME} hai. (Naam tabhi lena jab pucha jaye 'Owner kaun hai?'). "
+        f"Language: Hinglish, Delhi slang (yaar, whh , scene, op). "
+        f"Short Reply Rule: Sirf 1 line (Max 10-30 words). "
+        f"Memory: Pichli baaton ko yaad rakh kar reply karna. "
+        f"\n[CHAT HISTORY START]\n{conversation_context}\n[CHAT HISTORY END]\n"
     )
 
-    # 2. Retry Logic (Keys Rotate karega)
+    # 4. Generate Response
     for _ in range(len(available_keys)):
         try:
-            # Current Key uthao
             if current_key_index >= len(available_keys): current_key_index = 0
-            
             api_key = available_keys[current_key_index]
             genai.configure(api_key=api_key)
             
-            # 🔥 Fix: 'gemini-1.5-flash' use kiya hai (2.5 abhi valid nahi hai)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-2.5-flash')
             
-            # Chat Generation
-            response = model.generate_content(f"{system_instruction}\n\nUser ({user_name}): {user_text}\nYuki:")
+            # User ka naya message bhej rahe hain
+            response = model.generate_content(f"{system_instruction}\nUser ({user_name}): {user_text}\nYuki:")
             
-            if not response.text: raise Exception("Empty Response")
+            if not response.text: raise Exception("Empty")
             
-            return response.text.strip()
+            reply = response.text.strip()
+
+            # 5. History Update (Memory Save)
+            # Sirf last 6 messages rakhenge taaki token limit na aaye
+            user_histories[user_id].append(f"{user_name}: {user_text}")
+            user_histories[user_id].append(f"Yuki: {reply}")
+            if len(user_histories[user_id]) > 6:
+                user_histories[user_id] = user_histories[user_id][-6:]
+            
+            return reply
             
         except Exception as e:
-            print(f"⚠️ Key Failed: {e}")
-            # Agli key try karo
+            print(f"⚠️ Key Error: {e}")
             get_next_key(available_keys)
             continue
 
-    return "Server busy hai yaar..."
-    
+    return "Server busy hai..."
+
