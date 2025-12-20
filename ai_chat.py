@@ -51,7 +51,7 @@ def get_yuki_response(user_id, user_text, user_name):
             
             # 🔥 FIX: Model Name & System Instruction Direct Injection
             model = genai.GenerativeModel(
-                model_name='gemini-1.5-flash',
+                model_name='gemini-2.5-flash',
                 system_instruction=system_instruction
             )
             
