@@ -41,7 +41,7 @@ async def ensure_registered(update, context):
 
 # --- COMMANDS ---
 
-# 🔥 UPDATED /bal COMMAND 🔥
+# 🔥 /bal COMMAND 🔥
 async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Logic: Agar reply hai to Target User, warna Khud User
     if update.message.reply_to_message:
@@ -58,10 +58,8 @@ async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bal = get_balance(target.id)
     
     if target.id == update.effective_user.id:
-        # Khud ka balance
         await update.message.reply_text(f"💳 **Your Balance:** ₹{bal}", parse_mode=ParseMode.MARKDOWN)
     else:
-        # Dusre ka balance
         await update.message.reply_text(f"💳 **{target.first_name}'s Balance:** ₹{bal}", parse_mode=ParseMode.MARKDOWN)
 
 async def redeem_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -194,14 +192,12 @@ def main():
     # Handlers
     app.add_handler(CommandHandler("start", start.start))
     app.add_handler(CommandHandler("help", help.help_command))
-    app.add_handler(CommandHandler("admin", admin.admin_panel))
+    app.add_handler(CommandHandler("admin", admin.admin_panel)) # 🔥 MAIN ADMIN CMD
     
-    # 🔥 CHANGED BALANCE TO /bal
-    app.add_handler(CommandHandler("bal", balance_cmd)) 
+    app.add_handler(CommandHandler("bal", balance_cmd)) # /bal
     
     app.add_handler(CommandHandler("redeem", redeem_code))
     app.add_handler(CommandHandler("shop", shop_menu))
-    
     app.add_handler(CommandHandler("bet", bet.bet_menu))
     
     app.add_handler(CommandHandler("bank", bank.bank_info))
@@ -222,11 +218,8 @@ def main():
     app.add_handler(CommandHandler("protect", pay.protect_user))
     app.add_handler(CommandHandler("alive", pay.check_status))
     
-    # Legacy Admin
-    app.add_handler(CommandHandler("eco", admin.economy_toggle))
-    app.add_handler(CommandHandler("add", admin.add_money))
+    # 🔥 REMOVED: /eco, /add, and reset callback (Kyunki ab ye sab /admin panel me hain)
     
-    app.add_handler(CallbackQueryHandler(admin.reset_callback, pattern="^confirm_wipe$|^cancel_wipe$"))
     app.add_handler(CallbackQueryHandler(callback_handler))
     
     # Welcome & Messages
@@ -238,4 +231,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+        
