@@ -203,7 +203,9 @@ def main():
     app.add_handler(CallbackQueryHandler(admin.reset_callback, pattern="^confirm_wipe$|^cancel_wipe$"))
     app.add_handler(CallbackQueryHandler(callback_handler))
     
-    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, group_join_reward))
+    # Agar alag se sirf welcome chahiye:
+
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, group.welcome_user))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
     
     print("🚀 BOT STARTED SUCCESSFULLY!")
