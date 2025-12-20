@@ -47,7 +47,7 @@ def get_yuki_response(user_id, user_text, user_name):
             genai.configure(api_key=api_key)
             
             # 🔥 FIX: Model Name Sahi Kiya (1.5-flash)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-2.5-flash')
             
             # Generate (Bina Safety Settings ke)
             response = model.generate_content(full_prompt)
