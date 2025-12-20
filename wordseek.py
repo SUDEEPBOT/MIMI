@@ -8,98 +8,92 @@ import asyncio
 
 # Imports
 from config import TELEGRAM_TOKEN
-# 🔥 Note: Keys import kiye (Backup logic ke sath)
 from database import get_game_keys, get_all_keys, update_wordseek_score, get_wordseek_leaderboard
 
 # GAME STATE
 active_games = {}
 
+# --- 🔥 BACKUP WORDS (Agar API fail ho jaye) ---
+FALLBACK_WORDS = [
+    {"word": "APPLE", "phonetic": "/ˈæp.əl/", "meaning": "A round fruit with red or green skin and a white inside."},
+    {"word": "TIGER", "phonetic": "/ˈtaɪ.ɡər/", "meaning": "A large wild cat with yellow fur and black stripes."},
+    {"word": "BREAD", "phonetic": "/bred/", "meaning": "A food made from flour, water, and usually yeast, mixed together and baked."},
+    {"word": "CHAIR", "phonetic": "/tʃeər/", "meaning": "A seat for one person that has a back and usually four legs."},
+    {"word": "SMILE", "phonetic": "/smaɪl/", "meaning": "A happy or friendly expression on the face."},
+    {"word": "BEACH", "phonetic": "/biːtʃ/", "meaning": "An area of sand or small stones near the sea or another area of water."},
+    {"word": "DREAM", "phonetic": "/driːm/", "meaning": "A series of events or images that happen in your mind when you are sleeping."},
+    {"word": "LIGHT", "phonetic": "/laɪt/", "meaning": "The brightness that comes from the sun, fire, etc. and allows things to be seen."},
+    {"word": "HEART", "phonetic": "/hɑːt/", "meaning": "The organ in your chest that sends the blood around your body."},
+    {"word": "WATCH", "phonetic": "/wɒtʃ/", "meaning": "A small clock that is worn on a strap around the wrist."}
+]
+
 # --- 🔥 AUTO END JOB (5 Min Timeout) ---
 async def auto_end_job(context: ContextTypes.DEFAULT_TYPE):
     chat_id = context.job.data
-    
-    # Check agar game abhi bhi chal raha hai
     if chat_id in active_games:
         game = active_games[chat_id]
         target_word = game['target']
-        
-        # Game delete karo
         del active_games[chat_id]
-        
-        # Message bhejo
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"⏰ **Time's Up!**\n5 minute se koi nahi khel raha tha, isliye game end kar diya.\n\n📝 Correct Word: **{target_word}**",
+            text=f"⏰ **Time's Up!**\nGame end kar diya gaya.\n\n📝 Correct Word: **{target_word}**",
             parse_mode=ParseMode.MARKDOWN
         )
 
-# --- GEMINI HELPER ---
+# --- GEMINI HELPER (With Fallback) ---
 def get_word_from_gemini():
-    """Gemini se 1 Target Word lata hai (Strictly 5 Letters)"""
+    """Gemini se 1 Target Word lata hai. Fail hua to Backup list use karega."""
     
     # 1. Try Game Keys
     keys = get_game_keys()
-    
-    # 2. Fallback to Chat Keys
-    if not keys:
-        keys = get_all_keys()
+    if not keys: keys = get_all_keys() # Fallback to Chat Keys
 
-    if not keys: return None
+    # Agar Keys hain, to API try karo
+    if keys:
+        prompt = (
+            "Generate 1 random common English word (STRICTLY 5 letters long). "
+            "Provide the word, its phonetic transcription, and a clear hint (definition). "
+            "Output strictly in JSON format: "
+            '{"word": "VIDEO", "phonetic": "/ˈvɪd.i.əʊ/", "meaning": "To record using a video camera."}'
+        )
 
-    # 🔥 STRICT PROMPT
-    prompt = (
-        "Generate 1 random common English word (STRICTLY 5 letters long). "
-        "Provide the word, its phonetic transcription, and a clear hint (definition). "
-        "Output strictly in JSON format: "
-        '{"word": "VIDEO", "phonetic": "/ˈvɪd.i.əʊ/", "meaning": "To record using a video camera."}'
-    )
-
-    for key in keys:
-        try:
-            genai.configure(api_key=key)
-            # 🔥 Fix: 2.5-flash use kiya (2.5 exist nahi karta)
-            model = genai.GenerativeModel('gemini-2.5-flash')
-            response = model.generate_content(prompt)
-            text = response.text.strip()
-            if "```json" in text: text = text.replace("```json", "").replace("```", "")
-            if "```" in text: text = text.replace("```", "")
-            
-            data = json.loads(text)
-            
-            # 🔥 Double Check Length
-            if len(data['word']) != 5:
-                continue
+        for key in keys:
+            try:
+                genai.configure(api_key=key)
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                response = model.generate_content(prompt)
+                text = response.text.strip()
                 
-            return data
-        except: continue
-    return None
+                if "```json" in text: text = text.replace("```json", "").replace("```", "")
+                if "```" in text: text = text.replace("```", "")
+                
+                data = json.loads(text)
+                
+                if len(data['word']) == 5:
+                    print(f"✅ API Success: {data['word']}")
+                    return data
+            except Exception as e:
+                print(f"⚠️ API Error: {e}")
+                continue
+    
+    # 🔥 2. IF API FAILS -> USE BACKUP LIST
+    print("⚠️ API Failed! Using Fallback Word.")
+    return random.choice(FALLBACK_WORDS)
 
-# --- HELPER: GENERATE GRID (Wordle Logic) ---
+# --- HELPER: GENERATE GRID ---
 def generate_grid_string(target, guesses):
     target = target.upper()
     grid_msg = ""
-
     for guess in guesses:
         guess = guess.upper()
         row_emoji = ""
-        
-        # Simple Logic: 
-        # 🟩 Green: Sahi jagah
-        # 🟨 Yellow: Word me hai par galat jagah
-        # 🟥 Red: Word me nahi hai
-        
         for i, char in enumerate(guess):
-            if char == target[i]:
-                row_emoji += "🟩"
-            elif char in target:
-                row_emoji += "🟨"
-            else:
-                row_emoji += "🟥"
+            if char == target[i]: row_emoji += "🟩"
+            elif char in target: row_emoji += "🟨"
+            else: row_emoji += "🟥"
         
-        # Format: 🟥 🟨 🟩 🟥 🟥  T E D D Y
         formatted_word = " ".join(list(guess))
         grid_msg += f"{row_emoji}   `{formatted_word}`\n"
-        
     return grid_msg
 
 # --- COMMANDS ---
@@ -108,20 +102,18 @@ async def start_wordseek(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     
     if chat_id in active_games:
-        await update.message.reply_text("⚠️ Game pehle se chal raha hai! `/end` karo ya guess karo.")
+        await update.message.reply_text("⚠️ Game pehle se chal raha hai! `/end` karo.")
         return
 
     msg = await update.message.reply_text("🔄 **Loading Word Challenge...** 🧠")
     
-    # Async Executor to prevent blocking
+    # Async Executor
     loop = asyncio.get_running_loop()
     word_data = await loop.run_in_executor(None, get_word_from_gemini)
     
-    if not word_data:
-        await msg.edit_text("❌ No API Keys found! Ask Admin.")
-        return
-
-    # 🔥 5 MINUTE TIMER START
+    # Ab word_data kabhi None nahi hoga (Fallback ki wajah se)
+    
+    # Timer Start (5 Mins)
     timer_job = context.job_queue.run_once(auto_end_job, 300, data=chat_id)
 
     active_games[chat_id] = {
@@ -129,7 +121,7 @@ async def start_wordseek(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "data": word_data,
         "guesses": [],
         "message_id": msg.message_id,
-        "timer_job": timer_job 
+        "timer_job": timer_job
     }
     
     length = len(word_data['word'])
@@ -147,7 +139,6 @@ async def start_wordseek(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def stop_wordseek(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if chat_id in active_games:
-        # Stop Timer
         job = active_games[chat_id].get("timer_job")
         if job: job.schedule_removal()
         
@@ -165,14 +156,13 @@ async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target = game['target']
     user_guess = update.message.text.strip().upper()
     
-    # Validation
     if len(user_guess) != len(target): return
 
     if user_guess in game['guesses']:
-        await update.message.reply_text("Someone has already guessed your word. Please try another one!", quote=True)
+        await update.message.reply_text("Someone has already guessed your word!", quote=True)
         return
 
-    # 🔥 RESET TIMER
+    # Reset Timer
     old_job = game.get("timer_job")
     if old_job: old_job.schedule_removal()
     new_job = context.job_queue.run_once(auto_end_job, 300, data=chat.id)
@@ -180,15 +170,13 @@ async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     game['guesses'].append(user_guess)
     
-    # WIN SCENARIO
+    # WIN
     if user_guess == target:
         user = update.effective_user
         points = 9
         update_wordseek_score(user.id, user.first_name, points, str(chat.id))
         
-        # Stop Timer
         if new_job: new_job.schedule_removal()
-        
         data = game['data']
         del active_games[chat.id]
         
@@ -204,16 +192,11 @@ async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN
         )
     else:
-        # WRONG GUESS - UPDATE GRID
+        # WRONG - UPDATE GRID
         try:
             grid_text = generate_grid_string(target, game['guesses'])
             hint = game['data']['meaning']
-            
-            new_text = (
-                f"🔥 **WORD GRID CHALLENGE** 🔥\n\n"
-                f"{grid_text}\n"
-                f"> 💡 **Hint:** {hint}"
-            )
+            new_text = f"🔥 **WORD GRID CHALLENGE** 🔥\n\n{grid_text}\n> 💡 **Hint:** {hint}"
             
             await context.bot.edit_message_text(
                 chat_id=chat.id,
@@ -221,12 +204,12 @@ async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text=new_text,
                 parse_mode=ParseMode.MARKDOWN
             )
-        except Exception: pass
+        except: pass
 
 # --- LEADERBOARD ---
 async def wordseek_rank(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = [[InlineKeyboardButton("🌍 Global Top", callback_data="wrank_global"), InlineKeyboardButton("👥 Group Top", callback_data="wrank_group")]]
-    await update.message.reply_text("🏆 **WordSeek Leaderboard**\nSelect Category 👇", reply_markup=InlineKeyboardMarkup(kb))
+    await update.message.reply_text("🏆 **WordSeek Leaderboard**", reply_markup=InlineKeyboardMarkup(kb))
 
 async def wordseek_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -235,10 +218,8 @@ async def wordseek_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("wrank_"):
         mode = data.split("_")[1]
         group_id = str(update.effective_chat.id) if mode == "group" else None
-        
         leaderboard = get_wordseek_leaderboard(group_id)
-        title = "🌍 Global" if mode == "global" else "👥 Group"
-        msg = f"🏆 **{title} Leaderboard** 🏆\n\n"
+        msg = f"🏆 **{'Global' if mode=='global' else 'Group'} Leaderboard** 🏆\n\n"
         
         if not leaderboard: msg += "❌ No Data Found!"
         else:
