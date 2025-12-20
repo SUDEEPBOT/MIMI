@@ -7,12 +7,16 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 
 # IMPORTS
 from config import TELEGRAM_TOKEN
-from database import users_col, codes_col, update_balance, get_balance, check_registered, register_user, update_group_activity, update_username
-# 🔥 Added get_mimi_sticker import
+# 🔥 Added update_chat_stats import
+from database import users_col, codes_col, update_balance, get_balance, check_registered, register_user, update_group_activity, update_username, update_chat_stats
 from ai_chat import get_yuki_response, get_mimi_sticker
 
 # MODULES
-import admin, start, help, group, leaderboard, pay, bank, bet, wordseek, grouptools
+# 🔥 Added chatstat import
+import admin, start, help, group, leaderboard, pay, bank, bet, wordseek, grouptools, chatstat
+
+# 🔥 Import Anti-Spam
+from antispam import check_spam
 
 # --- FLASK SERVER ---
 app = Flask('')
@@ -149,6 +153,11 @@ async def callback_handler(update, context):
         await q.message.delete()
         return
 
+    # 🔥 8. CHAT STATS (Ranking) 🔥
+    if data.startswith(("rank_", "close_rank")):
+        await chatstat.rank_callback(update, context)
+        return
+
 # --- MESSAGE HANDLER (TEXT & MEDIA) ---
 async def handle_message(update, context):
     if not update.message: return
@@ -156,14 +165,27 @@ async def handle_message(update, context):
     user = update.effective_user
     chat = update.effective_chat
     
-    # 🔥 1. ADMIN INPUT CHECK 🔥
+    # 🔥 1. ANTI-SPAM CHECK (Sabse Pehle) 🔥
+    if not user.is_bot:
+        status = check_spam(user.id)
+        if status == False:
+            return # Blocked silently
+        elif status == "BLOCKED":
+            await update.message.reply_text(f"🚫 **Spam Detected!**\n{user.first_name}, you are blocked for 8 minutes.")
+            return
+
+    # 🔥 2. COUNT MESSAGES (For Ranking) 🔥
+    if chat.type in ["group", "supergroup"] and not user.is_bot:
+        update_chat_stats(chat.id, user.id, user.first_name)
+
+    # 🔥 3. ADMIN INPUT CHECK 🔥
     if await admin.handle_admin_input(update, context):
         return
     
-    # 🔥 2. WORD SEEK GUESS CHECK 🔥
+    # 🔥 4. WORD SEEK GUESS CHECK 🔥
     await wordseek.handle_word_guess(update, context)
 
-    # 🔥 3. STICKER REPLY LOGIC (Mimi) 🔥
+    # 🔥 5. STICKER REPLY LOGIC (Mimi) 🔥
     if update.message.sticker:
         # Logic: Private Chat OR Reply to Bot OR 30% Chance in Groups
         is_reply = False
@@ -242,6 +264,9 @@ def main():
     app.add_handler(CommandHandler("new", wordseek.start_wordseek))
     app.add_handler(CommandHandler("end", wordseek.stop_wordseek))
     app.add_handler(CommandHandler("wrank", wordseek.wordseek_rank))
+    
+    # 🔥 RANKING HANDLER (.crank / /crank) 🔥
+    app.add_handler(MessageHandler(filters.Regex(r'^[\./]crank$'), chatstat.show_leaderboard))
     
     # 🔥 GROUP TOOLS HANDLERS (Regex for . and /) 🔥
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]warn$'), grouptools.warn_user))
