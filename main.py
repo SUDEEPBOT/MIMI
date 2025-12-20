@@ -10,8 +10,8 @@ from config import TELEGRAM_TOKEN
 from database import users_col, codes_col, update_balance, get_balance, check_registered, register_user, update_group_activity, update_username
 from ai_chat import get_yuki_response
 
-# MODULES
-import admin, start, help, group, leaderboard, pay, bank, bet
+# MODULES (🔥 Added wordseek)
+import admin, start, help, group, leaderboard, pay, bank, bet, wordseek
 
 # --- FLASK SERVER ---
 app = Flask('')
@@ -43,18 +43,15 @@ async def ensure_registered(update, context):
 
 # 🔥 /bal COMMAND 🔥
 async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Logic: Agar reply hai to Target User, warna Khud User
     if update.message.reply_to_message:
         target = update.message.reply_to_message.from_user
     else:
         target = update.effective_user
 
-    # Bot Check
     if target.is_bot:
         await update.message.reply_text("🤖 Bots ke paas paise nahi hote bhai!")
         return
 
-    # Balance Fetch
     bal = get_balance(target.id)
     
     if target.id == update.effective_user.id:
@@ -106,27 +103,32 @@ async def callback_handler(update, context):
     data = q.data
     uid = q.from_user.id
     
-    # 🔥 1. ADMIN PANEL BUTTONS 🔥
+    # 🔥 1. ADMIN PANEL 🔥
     if data.startswith("admin_"):
         await admin.admin_callback(update, context)
         return
 
-    # 2. START MENU NAVIGATION
+    # 🔥 2. WORD SEEK GAME 🔥
+    if data.startswith(("wrank_", "new_wordseek_", "close_wrank")):
+        await wordseek.wordseek_callback(update, context)
+        return
+
+    # 3. START MENU
     if data.startswith(("help_", "start_chat_ai", "back_home")):
         await start.start_callback(update, context)
         return
 
-    # 3. Bet Logic
+    # 4. Bet Logic
     if data.startswith(("set_", "clk_", "cash_", "close_", "noop_", "rebet_")):
         await bet.bet_callback(update, context)
         return
 
-    # 4. Revive Logic
+    # 5. Revive Logic
     if data.startswith("revive_"):
         await pay.revive_callback(update, context)
         return
 
-    # 5. Register
+    # 6. Register
     if data.startswith("reg_start_"):
         target_id = int(data.split("_")[2])
         if uid != target_id: return await q.answer("Not for you!", show_alert=True)
@@ -134,7 +136,7 @@ async def callback_handler(update, context):
         else: await q.answer("Already registered!")
         return
 
-    # 6. Shop
+    # 7. Shop
     if data.startswith("buy_"):
         parts = data.split("_")
         target_id = int(parts[2])
@@ -152,10 +154,13 @@ async def handle_message(update, context):
     user = update.effective_user
     chat = update.effective_chat
     
-    # 🔥 1. ADMIN INPUT CHECK (Broadcast/Money) 🔥
+    # 🔥 1. ADMIN INPUT CHECK 🔥
     if await admin.handle_admin_input(update, context):
         return
-    # ---------------------------------------------
+    
+    # 🔥 2. WORD SEEK GUESS CHECK 🔥
+    # Agar game chal raha hai to guesses yahan check honge
+    await wordseek.handle_word_guess(update, context)
 
     if not update.message: return
     text = update.message.text if update.message.text else ""
@@ -192,10 +197,9 @@ def main():
     # Handlers
     app.add_handler(CommandHandler("start", start.start))
     app.add_handler(CommandHandler("help", help.help_command))
-    app.add_handler(CommandHandler("admin", admin.admin_panel)) # 🔥 MAIN ADMIN CMD
+    app.add_handler(CommandHandler("admin", admin.admin_panel))
     
-    app.add_handler(CommandHandler("bal", balance_cmd)) # /bal
-    
+    app.add_handler(CommandHandler("bal", balance_cmd))
     app.add_handler(CommandHandler("redeem", redeem_code))
     app.add_handler(CommandHandler("shop", shop_menu))
     app.add_handler(CommandHandler("bet", bet.bet_menu))
@@ -218,7 +222,10 @@ def main():
     app.add_handler(CommandHandler("protect", pay.protect_user))
     app.add_handler(CommandHandler("alive", pay.check_status))
     
-    # 🔥 REMOVED: /eco, /add, and reset callback (Kyunki ab ye sab /admin panel me hain)
+    # 🔥 WORD SEEK HANDLERS 🔥
+    app.add_handler(CommandHandler("new", wordseek.start_wordseek))
+    app.add_handler(CommandHandler("end", wordseek.stop_wordseek))
+    app.add_handler(CommandHandler("wrank", wordseek.wordseek_rank))
     
     app.add_handler(CallbackQueryHandler(callback_handler))
     
@@ -231,4 +238,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-        
