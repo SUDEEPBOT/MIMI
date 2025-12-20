@@ -1,14 +1,18 @@
 import time
 import psutil
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 from database import check_registered, register_user
-from config import OWNER_ID, OWNER_NAME # Make sure OWNER_NAME config.py me ho
+from config import OWNER_ID, OWNER_NAME
+# 🔥 Import Random Sticker Logic
+from ai_chat import get_mimi_sticker
 
 # --- GLOBAL VARS ---
 START_IMG = "https://i.ibb.co/WLB2B31/1000007092.png" 
 BOT_START_TIME = time.time()
+SUPPORT_LINK = "https://t.me/+N08m5L1mCTU2NTE1"
 
 # --- HELPER: GET UPTIME ---
 def get_readable_time():
@@ -26,20 +30,51 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_name = context.bot.first_name
     bot_username = context.bot.username
     
-    # --- 1. SYSTEM STATS ---
-    uptime = get_readable_time()
-    cpu = psutil.cpu_percent()
-    ram = psutil.virtual_memory().percent
-    disk = psutil.disk_usage('/').percent
+    # --- 1. ANIMATION SEQUENCE ---
+    
+    # A. Send Random Sticker (From Admin Packs)
+    try:
+        sticker_id = await get_mimi_sticker(context.bot)
+        if sticker_id:
+            stk = await update.message.reply_sticker(sticker=sticker_id)
+            await asyncio.sleep(2) # 2 Second wait
+            await stk.delete()     # Delete Sticker
+    except: pass 
 
-    # --- 2. AUTO REGISTRATION LOGIC ---
-    is_new_user = False
-    if not check_registered(user.id):
-        register_user(user.id, user.first_name)
-        is_new_user = True
+    # B. Send Emoji & Loading Bar
+    msg = await update.message.reply_text("⚡")
+    await asyncio.sleep(0.5)
+    
+    # Loading Animation Loop
+    bars = [
+        "⚡ ʟᴏᴀᴅɪɴɢ ▒▒▒▒▒",
+        "⚡ ʟᴏᴀᴅɪɴɢ █▒▒▒▒",
+        "⚡ ʟᴏᴀᴅɪɴɢ ██▒▒▒",
+        "⚡ ʟᴏᴀᴅɪɴɢ ███▒▒",
+        "⚡ ʟᴏᴀᴅɪɴɢ ████▒",
+        "⚡ ʟᴏᴀᴅɪɴɢ █████",
+        "✨ ᴄᴏᴍᴘʟᴇᴛᴇᴅ!"
+    ]
+    
+    for bar in bars:
+        try:
+            await msg.edit_text(bar)
+            await asyncio.sleep(0.3)
+        except: pass
+    
+    await asyncio.sleep(0.5)
+    await msg.delete() # Loading message delete
 
-    # --- 3. STYLISH CAPTION ---
-    # Owner Name Link (Blue Color in Telegram)
+    # --- 2. SYSTEM STATS & CAPTION ---
+    try:
+        uptime = get_readable_time()
+        cpu = psutil.cpu_percent()
+        ram = psutil.virtual_memory().percent
+        disk = psutil.disk_usage('/').percent
+    except:
+        uptime = "00:00:00"; cpu=0; ram=0; disk=0
+
+    # Owner Link
     owner_link = f"[{OWNER_NAME}](tg://user?id={OWNER_ID})"
 
     caption = f"""┌────── ˹ ɪɴғᴏʀᴍᴀᴛɪᴏɴ ˼─── ⏤‌‌●
@@ -55,22 +90,32 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 •──────────────────────•
 ✦ᴘᴏᴡєʀєᴅ ʙʏ » {owner_link}"""
 
+    # --- 3. AUTO REGISTRATION ---
+    is_new_user = False
+    if not check_registered(user.id):
+        register_user(user.id, user.first_name)
+        is_new_user = True
+
     # --- 4. BUTTONS ---
     keyboard = [
         [
             InlineKeyboardButton("💬 Chat AI", callback_data="start_chat_ai"),
-            InlineKeyboardButton("🚑 Support", url=f"tg://user?id={OWNER_ID}")
+            InlineKeyboardButton("📊 Ranking", callback_data="help_market") 
         ],
         [
-            InlineKeyboardButton("👑 Owner", url=f"tg://user?id={OWNER_ID}"),
-            InlineKeyboardButton("📚 Help & Menu", callback_data="help_main")
+            InlineKeyboardButton("🎮 Games & Casino", callback_data="help_games"),
+            InlineKeyboardButton("🛒 VIP Shop", callback_data="help_shop")
+        ],
+        [
+            InlineKeyboardButton("🚑 Support", url=SUPPORT_LINK),
+            InlineKeyboardButton("📚 Commands", callback_data="help_main")
         ],
         [
             InlineKeyboardButton("➕ Add Me To Your Group ➕", url=f"https://t.me/{bot_username}?startgroup=true")
         ]
     ]
 
-    # Main Photo Bhejo
+    # --- 5. SEND MAIN MESSAGE ---
     await update.message.reply_photo(
         photo=START_IMG,
         caption=caption,
@@ -78,7 +123,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.MARKDOWN
     )
 
-    # --- 5. BONUS MESSAGE (Only for New Users) ---
+    # --- 6. BONUS MESSAGE ---
     if is_new_user:
         await update.message.reply_text(
             f"🎉 **Welcome {user.first_name}!**\n"
@@ -87,7 +132,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN
         )
 
-# --- CALLBACK HANDLER (MENU LOGIC - Same as before) ---
+# --- CALLBACK HANDLER ---
 async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = q.data
@@ -101,12 +146,14 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🏦 **Bank:** Deposit, Withdraw, Loans\n"
             f"📈 **Market:** Invest, Sell, Ranking\n"
             f"🎮 **Games:** Mines, Betting\n"
-            f"🛒 **Shop:** Buy VIP, Items"
+            f"🛒 **Shop:** Buy VIP, Items\n"
+            f"👮 **Admin:** Group Management"
         )
         kb = [
-            [InlineKeyboardButton("🏦 Bank", callback_data="help_bank"), InlineKeyboardButton("📈 Market", callback_data="help_market")],
+            [InlineKeyboardButton("🏦 Bank", callback_data="help_bank"), InlineKeyboardButton("📊 Market", callback_data="help_market")],
             [InlineKeyboardButton("🎮 Games", callback_data="help_games"), InlineKeyboardButton("🛒 Shop", callback_data="help_shop")],
-            [InlineKeyboardButton("➡️ Next Page", callback_data="help_next")],
+            # 🔥 ADMIN BUTTON ADDED HERE
+            [InlineKeyboardButton("👮 Admin", callback_data="help_admin"), InlineKeyboardButton("🔮 Extra", callback_data="help_next")],
             [InlineKeyboardButton("🔙 Back Home", callback_data="back_home")]
         ]
         await q.edit_message_caption(caption=caption, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
@@ -127,11 +174,12 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "help_market":
         text = (
-            "📈 **STOCK MARKET**\n\n"
+            "📊 **RANKING & MARKET**\n\n"
+            "• `/crank` - **Chat Leaderboard**\n"
+            "• `/top` - Global Rich List\n"
             "• `/market` - View Share Prices\n"
             "• `/invest [group_id] [amount]` - Buy Shares\n"
-            "• `/sell [group_id]` - Sell Shares\n"
-            "• `/ranking` - Top Groups"
+            "• `/sell [group_id]` - Sell Shares"
         )
         kb = [[InlineKeyboardButton("🔙 Back", callback_data="help_main")]]
         await q.edit_message_caption(caption=text, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
@@ -139,6 +187,7 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "help_games":
         text = (
             "🎮 **GAMES & CASINO**\n\n"
+            "• `/new` - WordSeek Game (New!)\n"
             "• `/bet [amount]` - Play Mines 💣\n"
             "• `/rob` - Rob someone (Reply)\n"
             "• `/kill` - Kill someone (Reply)\n"
@@ -157,10 +206,26 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb = [[InlineKeyboardButton("🔙 Back", callback_data="help_main")]]
         await q.edit_message_caption(caption=text, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
 
+    # 🔥 ADMIN COMMANDS MENU 🔥
+    elif data == "help_admin":
+        text = (
+            "👮 **ADMIN COMMANDS**\n"
+            "_(Admin Rights Required)_\n\n"
+            "• `.warn` / `.unwarn` - Manage Warnings\n"
+            "• `.mute` / `.unmute` - Silence Users\n"
+            "• `.ban` / `.unban` - Ban Users\n"
+            "• `.kick` - Kick User\n"
+            "• `.pin` / `.unpin` - Pin Messages\n"
+            "• `.title [text]` - Set Admin Title\n"
+            "• `.promote` / `.demote` - Manage Admins\n"
+            "• `.d` - Delete Replied Message"
+        )
+        kb = [[InlineKeyboardButton("🔙 Back", callback_data="help_main")]]
+        await q.edit_message_caption(caption=text, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
+
     elif data == "help_next":
         text = (
             "🔮 **EXTRA COMMANDS**\n\n"
-            "• `/top` - Global Leaderboard\n"
             "• `/alive` - Check Health\n"
             "• `/eco` - Economy Status\n"
             "• `Hi Yuki` - Chat with AI"
@@ -175,14 +240,14 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 4. BACK HOME
     elif data == "back_home":
-        # Owner Link Re-calculate for Back Home
         owner_link = f"[{OWNER_NAME}](tg://user?id={OWNER_ID})"
-        
-        # Stats recalculate (Optional, can keep old values to be fast)
-        uptime = get_readable_time()
-        cpu = psutil.cpu_percent()
-        ram = psutil.virtual_memory().percent
-        disk = psutil.disk_usage('/').percent
+        try:
+            uptime = get_readable_time()
+            cpu = psutil.cpu_percent()
+            ram = psutil.virtual_memory().percent
+            disk = psutil.disk_usage('/').percent
+        except:
+            uptime = "00:00:00"; cpu=0; ram=0; disk=0
 
         caption = f"""┌────── ˹ ɪɴғᴏʀᴍᴀᴛɪᴏɴ ˼─── ⏤‌‌●
 ┆◍ ʜєʏ, {user.first_name} 🥀
@@ -198,10 +263,9 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ✦ᴘᴏᴡєʀєᴅ ʙʏ » {owner_link}"""
 
         keyboard = [
-            [InlineKeyboardButton("💬 Chat AI", callback_data="start_chat_ai"), InlineKeyboardButton("🚑 Support", url="https://t.me/+N08m5L1mCTU2NTE1")],
-            [InlineKeyboardButton("👑 Owner", url=f"tg://user?id={OWNER_ID}"), InlineKeyboardButton("📚 Help & Menu", callback_data="help_main")],
+            [InlineKeyboardButton("💬 Chat AI", callback_data="start_chat_ai"), InlineKeyboardButton("📊 Ranking", callback_data="help_market")],
+            [InlineKeyboardButton("🎮 Games & Casino", callback_data="help_games"), InlineKeyboardButton("🛒 VIP Shop", callback_data="help_shop")],
+            [InlineKeyboardButton("🚑 Support", url=SUPPORT_LINK), InlineKeyboardButton("📚 Commands", callback_data="help_main")],
             [InlineKeyboardButton("➕ Add Me To Your Group ➕", url=f"https://t.me/{context.bot.username}?startgroup=true")]
         ]
-        # Use edit_message_media if changing image, else edit_caption
-        # Assuming image is same, just caption update
         await q.edit_message_caption(caption=caption, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.MARKDOWN)
