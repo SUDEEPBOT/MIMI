@@ -21,7 +21,7 @@ try:
     packs_col = db["sticker_packs"]  
     chat_stats_col = db["chat_stats"]
     
-    # Voice & Moderation
+    # 🔥 NEW: Voice & Moderation Collections
     voice_keys_col = db["voice_keys"] 
     mutes_col = db["mutes"]           
     bans_col = db["bans"]             
@@ -144,7 +144,7 @@ def remove_warning(group_id, user_id):
 def reset_warnings(group_id, user_id):
     warnings_col.delete_one({"group_id": group_id, "user_id": user_id})
 
-# --- 5. WORDSEEK GAME SCORES (FIXED MISSING) ---
+# --- 5. WORDSEEK GAME SCORES ---
 
 def update_wordseek_score(user_id, name, points, group_id):
     wordseek_col.update_one({"_id": user_id}, {"$inc": {"global_score": points}, "$set": {"name": name}}, upsert=True)
@@ -228,6 +228,17 @@ def update_chat_stats(group_id, user_id, name):
             update_query["$set"]["last_date"] = today_str
         else: update_query["$inc"]["today"] = 1
         chat_stats_col.update_one({"_id": data["_id"]}, update_query)
+
+def get_top_chatters(group_id, mode="overall"):
+    sort_key = "overall" 
+    if mode == "today": sort_key = "today"
+    cursor = chat_stats_col.find({"group_id": group_id}).sort(sort_key, -1).limit(10)
+    return list(cursor)
+
+def get_total_messages(group_id):
+    pipeline = [{"$match": {"group_id": group_id}}, {"$group": {"_id": None, "total": {"$sum": "$overall"}}}]
+    result = list(chat_stats_col.aggregate(pipeline))
+    return result[0]["total"] if result else 0
 
 # --- 9. GROUPS & LOGGER ---
 
