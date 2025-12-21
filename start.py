@@ -77,25 +77,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Owner Link
     owner_link = f"[{OWNER_NAME}](tg://user?id={OWNER_ID})"
 
-    caption = f"""┌────── ˹ ɪɴғᴏʀᴍᴀᴛɪᴏɴ ˼─── ⏤‌‌●
+    caption = caption = f"""┌────── ˹ ɪɴғᴏʀᴍᴀᴛɪᴏɴ ˼─── ⏤‌‌●
 ┆◍ ʜєʏ, {user.first_name} 🥀
 ┆◍ ɪ ᴧϻ {bot_name}
 └────────────────────•
 ɪ ᴀᴍ ᴛʜᴇ ғᴀsᴛᴇsᴛ ᴀɴᴅ ᴘᴏᴡᴇʀғᴜʟ ᴇᴄᴏɴᴏᴍʏ & ᴀɪ ʙᴏᴛ ᴡɪᴛʜ sᴏᴍᴇ ᴀᴡᴇsᴏᴍᴇ ғᴇᴀᴛᴜʀᴇs.
 
-```
-╭─ ⚙️ 𝐒𝐘𝐒𝐓𝐄𝐌 𝐒𝐓𝐀𝐓𝐔𝐒
-│ ➥ ᴜᴘᴛɪᴍᴇ: `{uptime}`
-│ ➥ sᴇʀᴠᴇʀ sᴛᴏʀᴀɢᴇ: `{disk}%`
-│ ➥ ᴄᴘᴜ ʟᴏᴀᴅ: `{cpu}%`
-│ ➥ ʀᴀᴍ ᴄᴏɴsᴜᴍᴘᴛɪᴏɴ: `{ram}%`
+```text
+╭─ ⚙️ SYSTEM STATUS
+│ ➥ UPTIME: {uptime}
+│ ➥ SERVER STORAGE: {disk:.1f}%
+│ ➥ CPU LOAD: {cpu:.1f}%
+│ ➥ RAM CONSUMPTION: {ram:.1f}%
 ╰───────────────
-```
 
-•──────────────────────•
-```
-✦ ᴘᴏᴡєʀєᴅ ʙʏ » {owner_link}
-```
+•──────────────────────• 
+```✦ ᴘᴏᴡєʀєᴅ ʙʏ »``` {owner_link} 
 """
 
     # --- 3. AUTO REGISTRATION ---
