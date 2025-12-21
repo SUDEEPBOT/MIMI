@@ -8,9 +8,7 @@ from database import (
     add_game_key, remove_game_key, get_game_keys,
     add_sticker_pack, remove_sticker_pack, get_sticker_packs,
     wipe_database, set_economy_status, get_economy_status,
-    set_logger_group, delete_logger_group,
-    add_voice_key, remove_voice_key, get_all_voice_keys, 
-    set_custom_voice, get_custom_voice
+    set_logger_group, delete_logger_group
 )
 
 # Global variable state maintain karne ke liye
@@ -27,16 +25,13 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     eco_status = "🟢 ON" if get_economy_status() else "🔴 OFF"
     chat_keys = len(get_all_keys())
     game_keys = len(get_game_keys())
-    voice_keys = len(get_all_voice_keys())
     stickers = len(get_sticker_packs())
-    current_voice = get_custom_voice()
 
     text = (
         f"👮‍♂️ **ADMIN CONTROL PANEL**\n\n"
         f"⚙️ **Economy:** {eco_status}\n"
         f"💬 **Chat Keys:** `{chat_keys}`\n"
-        f"🎙 **Voice Keys:** `{voice_keys}`\n"
-        f"🗣 **Current Voice:** `{current_voice}`\n"
+        f"🎮 **Game Keys:** `{game_keys}`\n"
         f"👻 **Stickers:** `{stickers}`\n\n"
         f"👇 Select an action:"
     )
@@ -48,9 +43,6 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Keys Management
         [InlineKeyboardButton("🔑 Chat Keys", callback_data="admin_chat_keys_menu"), InlineKeyboardButton("🎮 Game Keys", callback_data="admin_game_keys_menu")],
-        
-        # 🔥 VOICE & TTS SECTION 🔥
-        [InlineKeyboardButton("🎙 Voice Keys", callback_data="admin_voice_keys_menu"), InlineKeyboardButton("🗣 Set Custom TTS", callback_data="admin_tts_set")],
         
         # Stickers & Logger
         [InlineKeyboardButton("👻 Stickers", callback_data="admin_stickers_menu"), InlineKeyboardButton("📝 Logger", callback_data="admin_logger_menu")],
@@ -71,23 +63,6 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if str(user_id) != str(OWNER_ID):
         await q.answer("❌ Sirf Owner ke liye hai!", show_alert=True)
-        return
-
-    # --- VOICE KEY MENU ---
-    if data == "admin_voice_keys_menu":
-        kb = [
-            [InlineKeyboardButton("➕ Add Voice Key", callback_data="admin_vkey_add")],
-            [InlineKeyboardButton("➖ Del Voice Key", callback_data="admin_vkey_del")],
-            [InlineKeyboardButton("🔙 Back", callback_data="admin_back")]
-        ]
-        await q.edit_message_text("🎙 **ElevenLabs Voice Keys**\nManage API keys for Mimi's voice note.", reply_markup=InlineKeyboardMarkup(kb))
-        return
-
-    # --- CUSTOM TTS SET ---
-    if data == "admin_tts_set":
-        ADMIN_INPUT_STATE[user_id] = 'set_tts_id'
-        kb = [[InlineKeyboardButton("🔙 Cancel", callback_data="admin_back")]]
-        await q.edit_message_text(f"🎙 **Set Custom Voice ID**\n\nElevenLabs se Voice ID paste karo.\n\n👉 Current: `{get_custom_voice()}`", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
         return
 
     # --- SUB-MENUS ---
@@ -113,17 +88,8 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- INPUT TRIGGERS (ADD & DELETE) ---
     
-    # 1. Voice Keys
-    if data == "admin_vkey_add":
-        ADMIN_INPUT_STATE[user_id] = 'add_voice_key'
-        await q.edit_message_text("➕ Send ElevenLabs API Key:")
-    elif data == "admin_vkey_del":
-        ADMIN_INPUT_STATE[user_id] = 'del_voice_key'
-        keys = "\n".join([f"`{k}`" for k in get_all_voice_keys()])
-        await q.edit_message_text(f"➖ Send Key to delete:\n\n{keys}", parse_mode=ParseMode.MARKDOWN)
-
-    # 2. Chat Keys
-    elif data == "admin_key_add":
+    # 1. Chat Keys
+    if data == "admin_key_add":
         ADMIN_INPUT_STATE[user_id] = 'add_key'
         await q.edit_message_text("➕ Send Gemini API Key:")
     elif data == "admin_key_del":
@@ -131,7 +97,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keys = "\n".join([f"`{k}`" for k in get_all_keys()])
         await q.edit_message_text(f"➖ Send Chat Key to delete:\n\n{keys}", parse_mode=ParseMode.MARKDOWN)
 
-    # 3. Game Keys
+    # 2. Game Keys
     elif data == "admin_game_key_add":
         ADMIN_INPUT_STATE[user_id] = 'add_game_key'
         await q.edit_message_text("🎮 Send WordSeek API Key:")
@@ -140,7 +106,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keys = "\n".join([f"`{k}`" for k in get_game_keys()])
         await q.edit_message_text(f"➖ Send Game Key to delete:\n\n{keys}", parse_mode=ParseMode.MARKDOWN)
 
-    # 4. Stickers
+    # 3. Stickers
     elif data == "admin_pack_add":
         ADMIN_INPUT_STATE[user_id] = 'add_pack'
         await q.edit_message_text("👻 Send Sticker Pack Name or Link:")
@@ -149,7 +115,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         packs = "\n".join([f"`{p}`" for p in get_sticker_packs()])
         await q.edit_message_text(f"➖ Send Pack Name to delete:\n\n{packs}", parse_mode=ParseMode.MARKDOWN)
 
-    # 5. Others
+    # 4. Others
     elif data == "admin_cast_ask":
         ADMIN_INPUT_STATE[user_id] = 'broadcast'
         await q.edit_message_text("📢 Send anything to Broadcast (Text/Photo/Video):")
@@ -213,22 +179,8 @@ async def handle_admin_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if not text: return False
 
-    # 🔥 2. CUSTOM TTS ID INPUT 🔥
-    if state == 'set_tts_id':
-        set_custom_voice(text)
-        await msg.reply_text(f"✅ **Custom Voice Set:** `{text}`")
-    
-    # 🔥 3. VOICE KEYS 🔥
-    elif state == 'add_voice_key':
-        if add_voice_key(text): await msg.reply_text("✅ Voice Key Added!")
-        else: await msg.reply_text("⚠️ Already exists.")
-        
-    elif state == 'del_voice_key':
-        if remove_voice_key(text): await msg.reply_text("🗑 Deleted!")
-        else: await msg.reply_text("❌ Not found.")
-
-    # 🔥 4. CHAT KEYS 🔥
-    elif state == 'add_key':
+    # 🔥 2. CHAT KEYS 🔥
+    if state == 'add_key':
         if add_api_key(text): await msg.reply_text("✅ Chat Key Added!")
         else: await msg.reply_text("⚠️ Exists!")
     
@@ -236,7 +188,7 @@ async def handle_admin_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if remove_api_key(text): await msg.reply_text("🗑 Chat Key Deleted!")
         else: await msg.reply_text("❌ Not Found.")
 
-    # 🔥 5. GAME KEYS 🔥
+    # 🔥 3. GAME KEYS 🔥
     elif state == 'add_game_key':
         if add_game_key(text): await msg.reply_text("✅ Game Key Added!")
         else: await msg.reply_text("⚠️ Exists!")
@@ -245,7 +197,7 @@ async def handle_admin_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if remove_game_key(text): await msg.reply_text("🗑 Game Key Deleted!")
         else: await msg.reply_text("❌ Not Found.")
 
-    # 🔥 6. STICKER PACKS 🔥
+    # 🔥 4. STICKER PACKS 🔥
     elif state == 'add_pack':
         pname = text.split('/')[-1]
         try:
@@ -258,7 +210,7 @@ async def handle_admin_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if remove_sticker_pack(text): await msg.reply_text("🗑 Pack Deleted!")
         else: await msg.reply_text("❌ Not Found.")
 
-    # 🔥 7. MONEY & OTHERS 🔥
+    # 🔥 5. MONEY & OTHERS 🔥
     elif state in ['add_money', 'take_money']:
         try:
             parts = text.split()
