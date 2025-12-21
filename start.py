@@ -245,7 +245,7 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer("💬 AI Mode Active!", show_alert=False)
         await q.message.reply_text(f"Hey **{user.first_name}**! 👋\nBas **'Hi Yuki'** ya **'Hello'** likho, main turant reply karungi!")
 
-    # 4. BACK HOME
+        # 4. BACK HOME
     elif data == "back_home":
         owner_link = f"[{OWNER_NAME}](tg://user?id={OWNER_ID})"
         try:
@@ -270,9 +270,9 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ✦ᴘᴏᴡєʀєᴅ ʙʏ » {owner_link}"""
 
         keyboard = [
-            [InlineKeyboardButton("💬 cнαт αι", callback_data="start_chat_ai"), InlineKeyboardButton("📊 ɾαɳƙιɳɠ", callback_data="help_market")],
-            [InlineKeyboardButton("🎮 gαмєѕ & ƈαʂιɳσ", callback_data="help_games"), InlineKeyboardButton("🛒 νιρ ѕнσρ", callback_data="help_shop")],
-            [InlineKeyboardButton("🎖️ѕυρρσят", url=SUPPORT_LINK), InlineKeyboardButton("📚 cσммαn∂ѕ", callback_data="help_main")],
-            [InlineKeyboardButton("➕ α∂∂ мє тσ уσυя gяσυρ ➕", url=f"https://t.me/{context.bot.username}?startgroup=true")]
+            [InlineKeyboardButton("💬 Chat AI", callback_data="start_chat_ai"), InlineKeyboardButton("📊 Ranking", callback_data="help_market")],
+            [InlineKeyboardButton("🎮 Games & Casino", callback_data="help_games"), InlineKeyboardButton("🛒 VIP Shop", callback_data="help_shop")],
+            [InlineKeyboardButton("🚑 Support", url=SUPPORT_LINK), InlineKeyboardButton("📚 Commands", callback_data="help_main")],
+            [InlineKeyboardButton("➕ Add Me To Your Group ➕", url=f"https://t.me/{context.bot.username}?startgroup=true")]
         ]
         await q.edit_message_caption(caption=caption, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.MARKDOWN)
