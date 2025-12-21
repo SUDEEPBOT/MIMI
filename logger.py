@@ -6,7 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 from config import OWNER_ID
-from database import get_total_users, get_total_groups
+from database import get_total_users, get_total_groups, get_all_voice_keys # 🔥 Voice Keys Import
 
 # --- RESTART COMMAND ---
 async def restart_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -20,7 +20,7 @@ async def restart_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     os.execl(sys.executable, sys.executable, *sys.argv)
 
-# --- PING COMMAND (FIXED) ---
+# --- PING COMMAND (FIXED WITH CLOSE ACTION) ---
 async def ping_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     start_time = time.time()
     # Loading Emoji
@@ -37,13 +37,12 @@ async def ping_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cpu = 0; ram = 0; disk = 0
     
     modules_list = [
-        "Admin", "Bank", "Economy", "Games",
-        "Market", "Ranking", "Anti-Spam", 
-        "WordSeek", "Logger", "AI Chat", "Group Tools"
+        "Admin", "Bank", "Economy", "Games", "Market", 
+        "Anti-Spam", "WordSeek", "Voice-AI", "Group Tools"
     ]
     modules_str = " | ".join(modules_list)
     
-    # Direct Image Link (Make sure ye link sahi ho)
+    # Direct Image Link
     PING_IMG = "https://i.ibb.co/QGGKVnw/image.png" 
     
     caption = f"""╭───〔 🤖 **sʏsᴛᴇᴍ sᴛᴀᴛᴜs** 〕───
@@ -57,15 +56,13 @@ async def ping_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📚 **ʟᴏᴀᴅᴇᴅ ᴍᴏᴅᴜʟᴇs:**
 `{modules_str}`"""
 
+    # 🔥 CLOSE BUTTON (Make sure main.py handles 'close_ping')
     kb = [[InlineKeyboardButton("❌ Close", callback_data="close_ping")]]
 
-    # 🔥 FIX: Pehle loading msg delete karo
     try:
         await msg.delete()
     except: pass
     
-    # 🔥 FIX: 'reply_photo' ki jagah 'send_photo' use kiya
-    # Taki agar command delete bhi ho jaye to error na aaye
     try:
         await context.bot.send_photo(
             chat_id=update.effective_chat.id,
@@ -75,7 +72,6 @@ async def ping_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN
         )
     except Exception as e:
-        # Fallback: Agar photo fail ho jaye to text bhejo
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=f"⚠️ **Image Error:** `{e}`\n\n{caption}",
@@ -83,7 +79,7 @@ async def ping_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN
         )
 
-# --- STATS COMMAND ---
+# --- STATS COMMAND (OWNER ONLY) ---
 async def stats_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if str(user.id) != str(OWNER_ID): 
@@ -92,15 +88,18 @@ async def stats_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         users = get_total_users()
         groups = get_total_groups()
+        v_keys = len(get_all_voice_keys()) # Voice keys count
     except:
-        users = 0
-        groups = 0
+        users = 0; groups = 0; v_keys = 0
 
-    text = f"""📊 **CURRENT DATABASE STATS**
+    text = f"""📊 **DATABASE & AI STATS**
     
 👤 **Total Users:** `{users}`
 👥 **Total Groups:** `{groups}`
+🎙 **Voice Keys:** `{v_keys} Active`
     
 ⚡ **Server Status:** Running Smoothly
     """
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    # Stats me bhi Close button de dete hain
+    kb = [[InlineKeyboardButton("🗑 Close Stats", callback_data="close_log")]]
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
