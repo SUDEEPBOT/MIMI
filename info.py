@@ -72,7 +72,8 @@ async def user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_photo(
                 photo=photos.photos[0][-1].file_id,
                 caption=msg,
-                parse_mode=ParseMode.HTML
+                parse_mode=ParseMode.HTML,
+                has_spoiler=True  # 🔥 SPOILER ADDED HERE
             )
         else:
             # If no photo, send text
