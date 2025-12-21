@@ -83,16 +83,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 └────────────────────•
 ɪ ᴀᴍ ᴛʜᴇ ғᴀsᴛᴇsᴛ ᴀɴᴅ ᴘᴏᴡᴇʀғᴜʟ ᴇᴄᴏɴᴏᴍʏ & ᴀɪ ʙᴏᴛ ᴡɪᴛʜ sᴏᴍᴇ ᴀᴡᴇsᴏᴍᴇ ғᴇᴀᴛᴜʀᴇs.
 
-```text
-⚙️ SYSTEM STATUS
-➥ UPTIME: 0h:2m:10s
-➥ STORAGE: 80.4%
-➥ CPU LOAD: 61.7%
-➥ RAM USED: 56.1%
+```
+╭─ ⚙️ 𝐒𝐘𝐒𝐓𝐄𝐌 𝐒𝐓𝐀𝐓𝐔𝐒
+│ ➥ ᴜᴘᴛɪᴍᴇ: `{uptime}`
+│ ➥ sᴇʀᴠᴇʀ sᴛᴏʀᴀɢᴇ: `{disk}%`
+│ ➥ ᴄᴘᴜ ʟᴏᴀᴅ: `{cpu}%`
+│ ➥ ʀᴀᴍ ᴄᴏɴsᴜᴍᴘᴛɪᴏɴ: `{ram}%`
+╰───────────────
 ```
 
 •──────────────────────•
+```
 ✦ ᴘᴏᴡєʀєᴅ ʙʏ » {owner_link}
+```
 """
 
     # --- 3. AUTO REGISTRATION ---
