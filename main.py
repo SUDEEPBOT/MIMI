@@ -124,14 +124,14 @@ async def callback_handler(update, context):
         await wordseek.wordseek_callback(update, context)
         return
 
-        # 4. START MENU & HELP (Separated)
-    async def callback_handler(update, context):
+        # --- CALLBACK HANDLER ---
+async def callback_handler(update, context):
     q = update.callback_query
     await q.answer()
     data = q.data
     uid = q.from_user.id
 
-    # 🔥 START MENU BUTTONS
+    # 🔥 START MENU BUTTONS (/start photo menu)
     if data.startswith((
         "help_main",
         "help_market",
