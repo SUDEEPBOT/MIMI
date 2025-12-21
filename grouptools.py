@@ -82,7 +82,16 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context): return
 
     if not update.message.reply_to_message:
-        return await update.message.reply_text("⚠️ **Galti!** Kisi user ke message par reply karke `.warn` likho.")
+    return await update.message.reply_text(
+        "⚠️ **Galti!**\nKisi user ke message par reply karke ye command use karo.",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+# Ab delete karo (optional)
+try:
+    await update.message.delete()
+except:
+    pass
 
     target = update.message.reply_to_message.from_user
     chat = update.effective_chat
