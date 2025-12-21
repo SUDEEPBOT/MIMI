@@ -249,6 +249,7 @@ def main():
     app.add_handler(CommandHandler("kill", pay.kill_user))
     app.add_handler(CommandHandler("protect", pay.protect_user))
     app.add_handler(CommandHandler("alive", pay.check_status))
+    app.add_handler(CommandHandler("topinvest", group.top_investors))
 
     # Callback Handlers
     app.add_handler(CallbackQueryHandler(callback_handler))
@@ -267,8 +268,6 @@ def main():
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]unban$'), grouptools.unban_user))
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]kick$'), grouptools.kick_user))
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]pin$'), grouptools.pin_message))
-
-app.add_handler(CommandHandler("topinvest", group.top_investors))
     
     # Message Logic (AI)
     app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message))
