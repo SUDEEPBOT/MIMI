@@ -144,6 +144,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- CALLBACK HANDLER ---
 async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
+    await q.answer()   # 👈 THIS IS MANDATORY
     data = q.data
     user = update.effective_user
     
