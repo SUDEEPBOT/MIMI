@@ -18,7 +18,7 @@ from ai_chat import get_yuki_response, get_mimi_sticker
 from tts import generate_voice 
 
 # MODULES
-import admin, start, help, group, leaderboard, pay, bet, wordseek, grouptools, chatstat, logger, events
+import admin, start, help, group, leaderboard, pay, bet, wordseek, grouptools, chatstat, logger, events, info
 
 # 🔥 Bank Updated Import
 import bank 
