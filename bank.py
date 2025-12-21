@@ -5,7 +5,7 @@ from telegram.ext import ContextTypes
 from database import (
     get_balance, update_balance, get_bank_balance, 
     update_bank_balance, get_loan, set_loan, 
-    users_col, is_dead, is_protected, get_user # 🔥 New Imports added
+    users_col, is_dead, is_protected, get_user
 )
 
 # Config
@@ -38,7 +38,6 @@ async def check_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status = "👤 ALIVE"
 
     # 3. Calculate Global Rank (Based on Wallet Balance)
-    # Logic: Count users who have MORE money than current user + 1
     rank = users_col.count_documents({"balance": {"$gt": wallet}}) + 1
 
     # 4. Message Formatting
@@ -60,8 +59,11 @@ async def check_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
     await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
 
-# --- OLD COMMANDS (Deposit/Withdraw/Loan) ---
-# Ye commands same rahenge bas /bal upar naya add kiya hai
+# --- OLD COMMANDS ---
+
+async def bank_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Ye purana command hai, bas fallback ke liye rakha hai
+    await check_balance(update, context)
 
 async def deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
