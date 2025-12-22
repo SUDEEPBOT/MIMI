@@ -1,3 +1,4 @@
+
 import random
 import string
 import io
@@ -6,6 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
+import telegram  # Import added for InputMediaPhoto
 
 # --- WORD DATABASE ---
 WORDS_POOL = [
@@ -193,8 +195,6 @@ async def start_wordgrid(update: Update, context: ContextTypes.DEFAULT_TYPE):
         active_games[chat_id]['message_pinned'] = True
     except Exception as e:
         print(f"Could not pin message: {e}")
-        # Optional: Send a notification if pinning fails
-        await update.message.reply_text("⚠️ Could not pin the game message. Make sure I have admin rights!", delete_after=5)
 
 # --- 4. HANDLE GUESS ---
 async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -202,63 +202,59 @@ async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
     text = update.message.text.upper().strip()
     
+    print(f"DEBUG: User {user_id} in chat {chat_id} guessed: {text}")
+    print(f"DEBUG: Active games: {list(active_games.keys())}")
+    
     if chat_id not in active_games:
+        print(f"DEBUG: No active game in chat {chat_id}")
         return
     
     game = active_games[chat_id]
+    print(f"DEBUG: Game targets: {game['targets']}")
+    print(f"DEBUG: Already found: {game['found']}")
     
-    if text in game['targets'] and text not in game['found']:
-        game['found'].append(text)
-        
-        # Update image with found word highlighted
-        photo = draw_grid_image(game['grid'], game['found'], game['word_positions'])
-        
-        if len(game['found']) == len(game['targets']):
-            # Game complete - unpin message and clean up
-            if game.get('message_pinned'):
-                try:
-                    await context.bot.unpin_chat_message(chat_id=chat_id, message_id=game['msg_id'])
-                except:
-                    pass
-            
-            del active_games[chat_id]
-            
-            # Send final image with all words found
-            final_caption = f"""
-<blockquote><b>🏆 {to_fancy("GAME COMPLETE")}!</b></blockquote>
-
-<blockquote>
-✅ All words found!
-🎉 Congratulations!
-</blockquote>
-
-<blockquote>
-<b>Words were:</b> {', '.join(game['targets'])}
-<b>👨‍💻 Dev:</b> Digan
-</blockquote>
-"""
-            await update.message.reply_photo(
-                photo=photo,
-                caption=final_caption,
-                parse_mode=ParseMode.HTML
-            )
-            await update.message.set_reaction("🎉")
-            return
-        
-        # Update game state with progress
-        new_list = []
-        for w in game['targets']:
-            if w in game['found']:
-                new_list.append(f"✅ <s>{w}</s>")
-            else:
-                new_list.append(f"▫️ <code>{game['hints'][w]}</code>")
-        
-        progress = len(game['found'])
-        total = len(game['targets'])
-        
-        caption = f"""
+    # Check if word is valid
+    if text not in game['targets']:
+        print(f"DEBUG: {text} is not in targets")
+        # Not a valid word - you can optionally add a reaction
+        try:
+            await update.message.set_reaction("❌")
+        except:
+            pass
+        return
+    
+    if text in game['found']:
+        print(f"DEBUG: {text} already found")
+        # Word already found - add reaction
+        try:
+            await update.message.set_reaction("⚠️")
+        except:
+            pass
+        return
+    
+    print(f"DEBUG: Found new word: {text}")
+    
+    # Add word to found list
+    game['found'].append(text)
+    
+    # Update image with found word highlighted
+    photo = draw_grid_image(game['grid'], game['found'], game['word_positions'])
+    
+    # Update the game message
+    new_list = []
+    for w in game['targets']:
+        if w in game['found']:
+            new_list.append(f"✅ <s>{w}</s>")
+        else:
+            new_list.append(f"▫️ <code>{game['hints'][w]}</code>")
+    
+    progress = len(game['found'])
+    total = len(game['targets'])
+    
+    caption = f"""
 <blockquote><b>🧩 {to_fancy("WORD GRID CHALLENGE")}</b></blockquote>
 
 <blockquote>
@@ -270,34 +266,80 @@ async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
 <b>👨‍💻 Dev:</b> Digan
 <b>🎯 Found: {progress}/{total} words</b>
 </blockquote>
-"""     
+"""
+    
+    try:
+        # Update the image
+        media = telegram.InputMediaPhoto(media=photo)
+        await context.bot.edit_message_media(
+            chat_id=chat_id,
+            message_id=game['msg_id'],
+            media=media
+        )
+        
+        # Update the caption
+        await context.bot.edit_message_caption(
+            chat_id=chat_id,
+            message_id=game['msg_id'],
+            caption=caption,
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏳️ Give Up", callback_data="giveup_wordgrid")]])
+        )
+        
+        # Add reaction to user's message
         try:
-            await context.bot.edit_message_media(
-                chat_id=chat_id,
-                message_id=game['msg_id'],
-                media=telegram.InputMediaPhoto(media=photo)
-            )
-            await context.bot.edit_message_caption(
-                chat_id=chat_id,
-                message_id=game['msg_id'],
-                caption=caption,
-                parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏳️ Give Up", callback_data="giveup_wordgrid")]])
-            )
             await update.message.set_reaction("✅")
-        except Exception as e:
-            print(f"Error updating game: {e}")
-            # Try to send new message if edit fails
+        except:
+            pass
+        
+        print(f"DEBUG: Successfully updated game for word: {text}")
+        
+    except Exception as e:
+        print(f"DEBUG: Error updating game: {str(e)}")
+        # Try to send a new message if edit fails
+        try:
+            msg = await update.message.reply_photo(
+                photo=photo,
+                caption=caption,
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏳️ Give Up", callback_data="giveup_wordgrid")]]),
+                parse_mode=ParseMode.HTML
+            )
+            active_games[chat_id]['msg_id'] = msg.message_id
+            print(f"DEBUG: Sent new message with ID: {msg.message_id}")
+        except Exception as e2:
+            print(f"DEBUG: Failed to send new message: {str(e2)}")
+    
+    # Check if game is complete
+    if len(game['found']) == len(game['targets']):
+        print(f"DEBUG: Game completed!")
+        # Game complete - unpin message and clean up
+        if game.get('message_pinned'):
             try:
-                msg = await update.message.reply_photo(
-                    photo=photo,
-                    caption=caption,
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏳️ Give Up", callback_data="giveup_wordgrid")]]),
-                    parse_mode=ParseMode.HTML
-                )
-                active_games[chat_id]['msg_id'] = msg.message_id
+                await context.bot.unpin_chat_message(chat_id=chat_id, message_id=game['msg_id'])
             except:
                 pass
+        
+        final_caption = f"""
+<blockquote><b>🏆 {to_fancy("GAME COMPLETE")}!</b></blockquote>
+
+<blockquote>
+✅ All words found!
+🎉 Congratulations @{update.effective_user.username if update.effective_user.username else update.effective_user.first_name}!
+</blockquote>
+
+<blockquote>
+<b>Words were:</b> {', '.join(game['targets'])}
+<b>👨‍💻 Dev:</b> Digan
+</blockquote>
+"""
+        try:
+            await update.message.reply_text(final_caption, parse_mode=ParseMode.HTML)
+            await update.message.set_reaction("🎉")
+        except:
+            pass
+        
+        # Remove game from active games
+        del active_games[chat_id]
 
 # --- 5. GIVE UP ---
 async def give_up(update: Update, context: ContextTypes.DEFAULT_TYPE):
