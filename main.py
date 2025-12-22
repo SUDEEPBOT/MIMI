@@ -190,6 +190,11 @@ async def callback_handler(update, context):
         await wordgrid.grid_callback(update, context)
         return
 
+    # 🔥 13. LIVE TIME CALLBACK
+    if data == "close_time":
+        await livetime.close_time(update, context)
+        return
+
 # --- MESSAGE HANDLER ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
@@ -331,6 +336,10 @@ def main():
     app.add_handler(CommandHandler("kill", pay.kill_user))
     app.add_handler(CommandHandler("protect", pay.protect_user))
     app.add_handler(CommandHandler("alive", pay.check_status))
+    
+    # Time Command
+    app.add_handler(CommandHandler("time", livetime.start_live_time))
+    app.add_handler(MessageHandler(filters.Regex(r'^[\./]time'), livetime.start_live_time))
 
     # Callback Handlers
     app.add_handler(CallbackQueryHandler(callback_handler))
@@ -341,10 +350,7 @@ def main():
     app.add_handler(MessageHandler(filters.StatusUpdate.VIDEO_CHAT_STARTED, events.vc_handler))
     app.add_handler(MessageHandler(filters.StatusUpdate.VIDEO_CHAT_ENDED, events.vc_handler))
     app.add_handler(MessageHandler(filters.StatusUpdate.VIDEO_CHAT_PARTICIPANTS_INVITED, events.vc_handler))
-
-    # Add this to your command handlers section
-app.add_handler(CommandHandler("time", livetime.start_live_time))
-app.add_handler(MessageHandler(filters.Regex(r'^[\./]time'), livetime.start_live_time))
+    
     app.add_handler(MessageHandler(filters.Regex(r'(?i)^[\./]crank'), chatstat.show_leaderboard))
     
     # Group Admin Tools
