@@ -97,8 +97,9 @@ def draw_grid_image(grid, found_words=None, word_positions=None):
     draw = ImageDraw.Draw(img)
     
     try:
-        font = ImageFont.truetype(FONT_PATH, 30)
-        header_font = ImageFont.truetype(FONT_PATH, 40)
+        # BIGGER FONT SIZE
+        font = ImageFont.truetype(FONT_PATH, 36)  # Increased from 30 to 36
+        header_font = ImageFont.truetype(FONT_PATH, 45)  # Increased from 40 to 45
     except:
         font = ImageFont.load_default()
         header_font = ImageFont.load_default()
@@ -163,25 +164,29 @@ async def auto_end_game(context: ContextTypes.DEFAULT_TYPE):
             except:
                 pass
         
-        # Edit message to show timeout
+        # Delete game message
         try:
-            await context.bot.edit_message_caption(
+            await context.bot.delete_message(chat_id=chat_id, message_id=game.get('msg_id'))
+        except:
+            pass
+        
+        # Send timeout notification
+        try:
+            timeout_msg = await context.bot.send_message(
                 chat_id=chat_id,
-                message_id=game.get('msg_id'),
-                caption=f"""
-<blockquote><b>⏰ {to_fancy("TIME'S UP")}!</b></blockquote>
+                text=f"""
+⏰ <b>{to_fancy("TIME'S UP")}!</b>
 
-<blockquote>
 Game ended due to inactivity (5 minutes)
-</blockquote>
 
-<blockquote>
 <b>Words were:</b> {', '.join(game['targets'])}
 <b>Found:</b> {len(game['found'])}/{len(game['targets'])}
-</blockquote>
 """,
                 parse_mode=ParseMode.HTML
             )
+            # Delete timeout message after 10 seconds
+            await asyncio.sleep(10)
+            await timeout_msg.delete()
         except:
             pass
         
@@ -222,20 +227,16 @@ async def start_wordgrid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     word_list_text = "\n".join([f"▫️ <code>{hints[w]}</code>" for w in targets])
     
-    caption = f"""
-<blockquote><b>🧩 {to_fancy("WORD GRID CHALLENGE")}</b></blockquote>
+    # COMPACT CAPTION - NO EXTRA GAPS
+    caption = f"""<blockquote><b>🧩 {to_fancy("WORD GRID CHALLENGE")}</b></blockquote>
 
-<blockquote>
-{word_list_text}
-</blockquote>
+<blockquote>{word_list_text}</blockquote>
 
-<blockquote>
-<b>👇 Type the FULL word to solve!</b>
+<blockquote><b>👇 Type the FULL word to solve!</b>
 <b>👨‍💻 Dev:</b> Digan
 <b>🎯 Found: 0/{len(targets)} words</b>
-<b>⏰ Auto-ends in 5 minutes</b>
-</blockquote>
-"""
+<b>⏰ Auto-ends in 5 minutes</b></blockquote>"""
+    
     kb = [[InlineKeyboardButton("🏳️ Give Up", callback_data="giveup_wordgrid")]]
     
     # Send the game message
@@ -271,6 +272,7 @@ async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
     
     # Check if there's an active game
     if chat_id not in active_games:
@@ -280,24 +282,24 @@ async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.upper().strip()
     
     # Debug print
-    print(f"DEBUG: User guessed: '{text}' in chat {chat_id}")
+    print(f"DEBUG: User {user_id} guessed: '{text}' in chat {chat_id}")
     print(f"DEBUG: Game targets: {game['targets']}")
     
     # Check if word is valid
     if text not in game['targets']:
-        # Not a valid word
+        # Not a valid word - send reaction
         try:
-            await update.message.set_reaction("❌")
-        except:
-            pass
+            await update.message.react("❌")
+        except Exception as e:
+            print(f"Error sending ❌ reaction: {e}")
         return
     
     if text in game['found']:
-        # Word already found
+        # Word already found - send reaction
         try:
-            await update.message.set_reaction("⚠️")
-        except:
-            pass
+            await update.message.react("⚠️")
+        except Exception as e:
+            print(f"Error sending ⚠️ reaction: {e}")
         return
     
     # Valid new word found!
@@ -320,7 +322,7 @@ async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Update image
     photo = draw_grid_image(game['grid'], game['found'], game['word_positions'])
     
-    # Update caption
+    # Update caption - COMPACT VERSION
     new_list = []
     for w in game['targets']:
         if w in game['found']:
@@ -331,20 +333,14 @@ async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
     progress = len(game['found'])
     total = len(game['targets'])
     
-    caption = f"""
-<blockquote><b>🧩 {to_fancy("WORD GRID CHALLENGE")}</b></blockquote>
+    caption = f"""<blockquote><b>🧩 {to_fancy("WORD GRID CHALLENGE")}</b></blockquote>
 
-<blockquote>
-{"\n".join(new_list)}
-</blockquote>
+<blockquote>{"\n".join(new_list)}</blockquote>
 
-<blockquote>
-<b>👇 Type the FULL word to solve!</b>
+<blockquote><b>👇 Type the FULL word to solve!</b>
 <b>👨‍💻 Dev:</b> Digan
 <b>🎯 Found: {progress}/{total} words</b>
-<b>⏰ Auto-ends in 5 minutes</b>
-</blockquote>
-"""
+<b>⏰ Auto-ends in 5 minutes</b></blockquote>"""
     
     try:
         # Update image
@@ -364,11 +360,17 @@ async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏳️ Give Up", callback_data="giveup_wordgrid")]])
         )
         
-        # Add reaction
+        # Add REACTION (not reply)
         try:
-            await update.message.set_reaction("✅")
-        except:
-            pass
+            await update.message.react("👍")
+            print(f"DEBUG: Sent 👍 reaction for correct word")
+        except Exception as e:
+            print(f"Error sending 👍 reaction: {e}")
+            # Fallback: Try to send message reply
+            try:
+                await update.message.reply_text(f"✅ Correct! Found: {text}")
+            except:
+                pass
         
         print(f"DEBUG: Successfully found word: {text}")
         
@@ -392,26 +394,38 @@ async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except:
                 pass
         
-        # Send completion message
-        final_caption = f"""
-<blockquote><b>🏆 {to_fancy("GAME COMPLETE")}!</b></blockquote>
-
-<blockquote>
-✅ All {total} words found!
-🎉 Congratulations @{update.effective_user.username if update.effective_user.username else update.effective_user.first_name}!
-⏱️ Time: {(time.time() - game['start_time']):.1f}s
-</blockquote>
-
-<blockquote>
-<b>Words:</b> {', '.join(game['targets'])}
-<b>👨‍💻 Dev:</b> Digan
-</blockquote>
-"""
+        # Delete game message
         try:
-            await update.message.reply_text(final_caption, parse_mode=ParseMode.HTML)
-            await update.message.set_reaction("🎉")
+            await context.bot.delete_message(chat_id=chat_id, message_id=game['msg_id'])
         except:
             pass
+        
+        # Send completion message
+        final_caption = f"""<blockquote><b>🏆 {to_fancy("GAME COMPLETE")}!</b></blockquote>
+
+<blockquote>✅ All {total} words found!
+🎉 Congratulations @{update.effective_user.username if update.effective_user.username else update.effective_user.first_name}!
+⏱️ Time: {(time.time() - game['start_time']):.1f}s</blockquote>
+
+<blockquote><b>Words:</b> {', '.join(game['targets'])}
+<b>👨‍💻 Dev:</b> Digan</blockquote>"""
+        
+        try:
+            # Send completion message
+            completion_msg = await update.message.reply_text(final_caption, parse_mode=ParseMode.HTML)
+            
+            # Add celebration reaction
+            try:
+                await update.message.react("🎉")
+            except:
+                pass
+            
+            # Delete completion message after 15 seconds
+            await asyncio.sleep(15)
+            await completion_msg.delete()
+            
+        except Exception as e:
+            print(f"Error sending completion message: {e}")
         
         # Clean up
         del active_games[chat_id]
@@ -439,25 +453,34 @@ async def give_up(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except:
                 pass
         
-        # Remove game
-        del active_games[chat_id]
+        # Delete game message
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=game['msg_id'])
+        except:
+            pass
         
-        await query.message.edit_caption(
-            caption=f"""
-<blockquote><b>❌ {to_fancy("GAME OVER")}</b></blockquote>
+        # Send give up message
+        giveup_msg = await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"""<blockquote><b>❌ {to_fancy("GAME OVER")}</b></blockquote>
 
-<blockquote>
-🏳️ Game ended by user
-⏱️ Time played: {(time.time() - game['start_time']):.1f}s
-</blockquote>
+<blockquote>🏳️ Game ended by user
+⏱️ Time played: {(time.time() - game['start_time']):.1f}s</blockquote>
 
-<blockquote>
-<b>Words were:</b> {', '.join(targets)}
-<b>Found:</b> {len(game['found'])}/{len(targets)}
-</blockquote>
-""",
+<blockquote><b>Words were:</b> {', '.join(targets)}
+<b>Found:</b> {len(game['found'])}/{len(targets)}</blockquote>""",
             parse_mode=ParseMode.HTML
         )
+        
+        # Delete give up message after 10 seconds
+        await asyncio.sleep(10)
+        try:
+            await giveup_msg.delete()
+        except:
+            pass
+        
+        # Remove game
+        del active_games[chat_id]
     else:
         await query.answer("No active game.", show_alert=True)
 
