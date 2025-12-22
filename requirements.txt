@@ -1,12 +1,12 @@
 python-telegram-bot
-pymongo==4.10.1
-dnspython==2.7.0
-flask==3.0.3
-google-generativeai==0.8.3
-psutil==6.1.0
-pytz==2024.2
-edge-tts==6.1.12
-Pillow==11.0.0
+pymongo
+dnspython
+flask
+google-generativeai
+psutil
+pytz
+edge-tts
+Pillow
 yt-dlp==2024.7.23.232906.dev0
 tgcrypto==1.2.5
 
