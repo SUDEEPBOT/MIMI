@@ -7,6 +7,9 @@ OWNER_ID = 7453179290  # Tumhara (Owner) Telegram ID
 # Isko aise update karo brackets [] ke sath
 OWNER_IDS = [7453179290, 6356015122]  # Yahan dusre bande ki ID daal dena
 
+# config.py ke andar ye hona chahiye
+LOGGER_ID = -1003639584506 
+
 #bot name 
 BOT_NAME = "ㅤ𝚲𝛈𝛊𝛄𝛂me "
 
