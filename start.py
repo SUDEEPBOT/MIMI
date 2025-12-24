@@ -106,18 +106,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         register_user(user.id, user.first_name)
         is_new_user = True
         
-    # --- 🔥 4. LOGGER LOGIC (ADDED HERE) 🔥 ---
-    # Har start par Logger Group me msg jayega
+        # --- 🔥 4. LOGGER LOGIC (FANCY DESIGN) 🔥 ---
     logger_id = get_logger_group()
     if logger_id:
         try:
-            log_msg = (
-                f"📢 <b>USER STARTED BOT</b>\n\n"
-                f"👤 <b>User:</b> {user.mention_html()}\n"
-                f"🆔 <b>ID:</b> <code>{user.id}</code>\n"
-                f"🔗 <b>Username:</b> @{user.username if user.username else 'No Username'}"
-            )
-            # Log message HTML format me bhejenge
+            # ✨ FANCY TEXT + BLOCKQUOTE DESIGN
+            log_msg = f"""
+<blockquote><b>📢 ᴜsᴇʀ sᴛᴀʀᴛᴇᴅ ʙᴏᴛ</b></blockquote>
+
+<blockquote>
+<b>👤 ɴᴀᴍᴇ :</b> {user.mention_html()}
+<b>🆔 ᴜsᴇʀ ɪᴅ :</b> <code>{user.id}</code>
+<b>🔗 ᴜsᴇʀɴᴀᴍᴇ :</b> @{user.username if user.username else 'No Username'}
+</blockquote>
+"""
             await context.bot.send_message(chat_id=logger_id, text=log_msg, parse_mode=ParseMode.HTML)
         except Exception as e:
             print(f"⚠️ Logger Error: {e}")
