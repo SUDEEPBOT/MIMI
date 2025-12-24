@@ -1,35 +1,30 @@
 import os
 
-# ⚙️ TELEGRAM CONFIG
-# Ye values Render ke "Environment" tab se aayengi
+# ⚙️ CONFIGURATION
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN") 
 MONGO_URL = os.getenv("MONGO_URL")
+OWNER_ID = 7453179290  # Tumhara (Owner) Telegram ID
+# Isko aise update karo brackets [] ke sath
+OWNER_IDS = [7453179290, 6356015122]  # Yahan dusre bande ki ID daal dena
 
-# 👑 OWNERS
-# Owner ID ko bhi .env se le sakte ho ya yahan hardcode kar sakte ho
-OWNER_ID = int(os.getenv("OWNER_ID", "7453179290")) 
-OWNER_IDS = [7453179290, 6356015122]  
-
-# 📝 LOGGING
+# config.py ke andar ye hona chahiye
 LOGGER_ID = -1003639584506 
 
-# 🤖 BOT INFO
+#bot name 
 BOT_NAME = "ㅤ𝚲𝛈𝛊𝛄𝛂me "
-OWNER_USERNAME = "@THE_BOSS_JI"
-OWNER_NAME = "BOSS JI"
 
-# 🔥 MUSIC BOT CONFIG (From Environment)
-# int() lagaya hai kyunki API_ID number hona chahiye
-API_ID = int(os.getenv("API_ID", "0")) 
-API_HASH = os.getenv("API_HASH")
-STRING_SESSION = os.getenv("STRING_SESSION")
+OWNER_USERNAME = "@THE_BOSS_JI"
+
+# 🤖 AI CHAT CONFIG
+OWNER_NAME = "BOSS JI"  # Yahan apna naam likho (Yuki tumhe is naam se bulayegi)
 
 # 🎮 GAME SETTINGS
 GRID_SIZE = 4
 MAX_LOAN = 5000
 LOAN_INTEREST = 0.10
-DELETE_TIMER = 17 
+DELETE_TIMER = 17  # Result message kitne seconds baad delete hoga
 
-# 🏆 IMAGES
+# 🏆 RANKING IMAGE
+# Agar top group ki photo nahi milti toh ye default image dikhegi
 DEFAULT_BANNER = "https://i.ibb.co/vzDpQx9/ranking-banner.jpg"
 
