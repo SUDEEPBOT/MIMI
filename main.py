@@ -20,7 +20,7 @@ from ai_chat import get_yuki_response, get_mimi_sticker
 from tts import generate_voice 
 
 # 🔥 IMPORT MUSIC ENGINE (Userbot Start karne ke liye)
-from music_engine import start_music_engine
+from engine import start_music_engine
 
 # MODULES (OLD ONES)
 import admin, start, help, group, leaderboard, pay, bet, wordseek, grouptools, chatstat, logger, events, info, tictactoe, couple
