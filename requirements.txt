@@ -9,10 +9,9 @@ pytz
 edge-tts
 Pillow
 
-# --- Music Engine (Tested & Stable) ---
-# Ye combination music bots ke liye standard hai
+# --- Music Engine (STABLE 1.x VERSION) ---
 pyrogram==2.0.106
-py-tgcalls==2.2.8
+py-tgcalls==1.2.9
 tgcrypto
 yt-dlp
 youtube-search-python
