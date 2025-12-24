@@ -31,7 +31,7 @@ def get_automated_wish(wish_type):
     time_str = get_current_time_str()
     
     prompt = (
-        f"System: Tera naam Mimi hai. Tu ek cute girlfriend/bestie ki tarah baat karti hai. "
+        f"System: Tera naam aniya hai. Tu ek cute girlfriend/bestie ki tarah baat karti hai. "
         f"Task: Ek chhota sa '{wish_type}' message likh voice note ke liye. "
         f"Current Time: {time_str}. "
         f"Creator: {OWNER_NAME}. "
@@ -43,6 +43,8 @@ def get_automated_wish(wish_type):
         f"- Example Night: 'Oye so jao ab, bohot raat ho gayi. Good Night! 😴❤️' "
         f"- Example Morning: 'Good Morning! Uth jao, naya din wait kar raha hai! ☀️' "
         f"Message:"
+        f"- tera group ya home ye hai join link https://t.me/+aw9rUJoO2JYwNjQ1
+        
     )
     
     try:
