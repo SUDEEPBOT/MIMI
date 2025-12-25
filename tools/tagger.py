@@ -2,15 +2,12 @@ import random
 import asyncio
 import time
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.constants import ParseMode
+from telegram.constants import ParseMode, ChatMemberStatus
 from telegram.ext import ContextTypes, Application, CommandHandler, CallbackQueryHandler
 from telegram.error import BadRequest, Forbidden, TelegramError
 
-# Database imports (agar aapke pass database.py hai)
-from database import users_col, get_balance
-
 # Global variables
-active_tag_sessions = {}  # Format: {chat_id: {"stop": False, "tagged": 0}}
+active_tag_sessions = {}
 
 # EMOJI and MESSAGES (same as before)
 EMOJI = [
@@ -82,194 +79,217 @@ VC_TAG = [
 ]
 
 # ==================== HELPER FUNCTIONS ====================
-async def is_admin(chat_id: int, user_id: int, context: ContextTypes.DEFAULT_TYPE):
-    """Check if user is admin in group"""
+async def is_user_admin(chat_id: int, user_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """Check if user is admin"""
     try:
         chat_member = await context.bot.get_chat_member(chat_id, user_id)
-        return chat_member.status in ['creator', 'administrator']
-    except Exception as e:
-        print(f"Admin check error: {e}")
+        return chat_member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
+    except:
         return False
 
-async def get_chat_members_fixed(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
-    """Fixed function to get chat members"""
-    members = []
+async def is_bot_admin(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """Check if bot is admin in the group"""
     try:
-        # Try to get approximate member count first
-        chat = await context.bot.get_chat(chat_id)
-        print(f"📊 Chat: {chat.title}, Members: {chat.get('member_count', 'Unknown')}")
+        bot_id = context.bot.id
+        chat_member = await context.bot.get_chat_member(chat_id, bot_id)
+        return chat_member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
+    except:
+        return False
+
+async def get_all_members_as_admin(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """Get ALL members when bot is admin"""
+    members = []
+    
+    try:
+        # First check if bot is admin
+        if not await is_bot_admin(chat_id, context):
+            print("❌ Bot is not admin, cannot get all members")
+            return members
         
-        # Get administrators first
-        admins = await context.bot.get_chat_administrators(chat_id)
-        for admin in admins:
-            if not admin.user.is_bot:
-                members.append(admin.user)
+        print("✅ Bot is admin, attempting to get all members...")
         
-        print(f"✅ Found {len(admins)} admins")
-        
-        # Try alternative method for regular members
-        # Get recent message senders
+        # Method 1: Try to get members using get_chat_members (if available)
         try:
-            messages = await context.bot.get_chat_history(chat_id, limit=50)
-            for msg in messages:
-                if hasattr(msg, 'from_user') and msg.from_user:
-                    if not msg.from_user.is_bot and msg.from_user.id not in [m.id for m in members]:
-                        members.append(msg.from_user)
-        except:
-            pass
+            # This only works for small groups usually
+            async for member in context.bot.get_chat_members(chat_id):
+                if not member.user.is_bot:
+                    members.append(member.user)
+            print(f"✅ Method 1: Found {len(members)} members")
+        except Exception as e:
+            print(f"Method 1 failed: {e}")
         
-        print(f"📋 Total members collected: {len(members)}")
+        # Method 2: Get from chat administrators (always works for admins)
+        try:
+            admins = await context.bot.get_chat_administrators(chat_id)
+            admin_ids = [m.user.id for m in members]
+            
+            for admin in admins:
+                if not admin.user.is_bot and admin.user.id not in admin_ids:
+                    members.append(admin.user)
+            print(f"✅ Method 2: Added {len(admins)} admins")
+        except Exception as e:
+            print(f"Method 2 failed: {e}")
+        
+        # Method 3: Get from recent messages (500 messages)
+        try:
+            message_senders = set()
+            async for message in context.bot.get_chat_history(chat_id, limit=500):
+                if hasattr(message, 'from_user') and message.from_user:
+                    user = message.from_user
+                    if not user.is_bot and user.id not in [m.id for m in members]:
+                        members.append(user)
+                        message_senders.add(user.id)
+            print(f"✅ Method 3: Added {len(message_senders)} recent message senders")
+        except Exception as e:
+            print(f"Method 3 failed: {e}")
+        
+        print(f"📊 Total unique members found: {len(members)}")
         
     except Exception as e:
-        print(f"Error getting members: {e}")
+        print(f"❌ Error getting members: {e}")
     
     return members
 
-async def tag_user(context: ContextTypes.DEFAULT_TYPE, chat_id: int, user_id: int, user_name: str, tag_type: str, custom_text: str = ""):
-    """Tag a single user"""
+async def tag_all_members_admin(context: ContextTypes.DEFAULT_TYPE, chat_id: int, tag_text: str, tag_type: str):
+    """Tag all members when bot is admin"""
     try:
-        if tag_type == "gn":
-            message = f"[{user_name}](tg://user?id={user_id}) {random.choice(TAGMES)}"
-        elif tag_type == "gm":
-            message = f"[{user_name}](tg://user?id={user_id}) {random.choice(VC_TAG)}"
-        else:  # custom
-            message = f"[{user_name}](tg://user?id={user_id}) {custom_text}"
-        
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode=ParseMode.MARKDOWN,
-            disable_web_page_preview=True
-        )
-        return True
-    except Forbidden:
-        print(f"❌ Can't send message to {user_name} (blocked)")
-        return False
-    except BadRequest as e:
-        print(f"❌ Bad request for {user_name}: {e}")
-        return False
-    except Exception as e:
-        print(f"❌ Error tagging {user_name}: {e}")
-        return False
-
-# ==================== SIMPLE TAG FUNCTION (WORKING VERSION) ====================
-async def simple_tag_members(context: ContextTypes.DEFAULT_TYPE, chat_id: int, tag_text: str, tag_type: str):
-    """Simple working version for tagging"""
-    try:
-        # First test if bot can send messages
-        test_msg = await context.bot.send_message(
-            chat_id, 
-            "🎯 Starting tagging process...",
-            parse_mode=ParseMode.MARKDOWN
+        # Send start message
+        start_msg = await context.bot.send_message(
+            chat_id,
+            "👑 **ADMIN MODE ACTIVATED**\n"
+            "🔍 Collecting ALL group members...\n"
+            "⏳ This may take a while for large groups."
         )
         
-        # Get chat administrators first
-        admins = []
-        try:
-            admins = await context.bot.get_chat_administrators(chat_id)
-            print(f"👑 Found {len(admins)} admins")
-        except Exception as e:
-            print(f"Error getting admins: {e}")
+        # Check if bot is admin
+        if not await is_bot_admin(chat_id, context):
+            await start_msg.edit_text(
+                "❌ **Bot is not Admin!**\n"
+                "Please make me admin to tag all members.\n"
+                "Required permissions:\n"
+                "• Delete messages\n"
+                "• Invite users\n"
+                "• Pin messages"
+            )
+            return
+        
+        # Get all members
+        all_members = await get_all_members_as_admin(chat_id, context)
+        
+        if not all_members:
+            await start_msg.edit_text(
+                "❌ Could not collect members!\n"
+                "Try these solutions:\n"
+                "1. Make sure bot has admin rights\n"
+                "2. Try in a smaller group first\n"
+                "3. Use /tagtest to test"
+            )
+            return
+        
+        # Update start message
+        await start_msg.edit_text(
+            f"✅ **Found {len(all_members)} members!**\n"
+            f"🎯 Starting to tag everyone...\n"
+            f"⏳ Estimated time: {len(all_members) * 2} seconds\n"
+            f"🛑 Use /tagstop to cancel"
+        )
+        
+        # Initialize session
+        active_tag_sessions[chat_id] = {
+            "stop": False,
+            "tagged": 0,
+            "total": len(all_members),
+            "failed": 0
+        }
         
         tagged_count = 0
         failed_count = 0
         
-        # Tag all admins
-        if admins:
-            await context.bot.send_message(chat_id, f"👑 Tagging {len(admins)} admins...")
+        # Shuffle members for better distribution
+        random.shuffle(all_members)
+        
+        # Tag each member
+        for i, user in enumerate(all_members):
+            # Check if should stop
+            if active_tag_sessions[chat_id]["stop"]:
+                break
             
-            for admin in admins:
-                if chat_id in active_tag_sessions and active_tag_sessions[chat_id].get("stop"):
-                    break
-                    
-                if not admin.user.is_bot:
-                    success = await tag_user(
-                        context, chat_id, admin.user.id, 
-                        admin.user.first_name, tag_type, tag_text
-                    )
-                    
-                    if success:
-                        tagged_count += 1
-                        # Update session
-                        if chat_id in active_tag_sessions:
-                            active_tag_sessions[chat_id]["tagged"] = tagged_count
-                    else:
-                        failed_count += 1
-                    
-                    # Delay
-                    await asyncio.sleep(random.uniform(2, 3))
-        
-        # Tag recent active users
-        await context.bot.send_message(chat_id, "👥 Tagging recent active users...")
-        
-        # Create a list of known users (you can add more manually if needed)
-        known_users = [
-            # Add some test user mentions if needed
-        ]
-        
-        # If we have message history, tag recent senders
-        try:
-            messages = []
-            async for msg in context.bot.get_chat_history(chat_id, limit=30):
-                messages.append(msg)
+            user_name = user.first_name or "User"
+            user_id = user.id
             
-            for msg in messages:
-                if chat_id in active_tag_sessions and active_tag_sessions[chat_id].get("stop"):
-                    break
-                    
-                if hasattr(msg, 'from_user') and msg.from_user and not msg.from_user.is_bot:
-                    # Check if already tagged
-                    user_already_tagged = False
-                    for admin in admins:
-                        if admin.user.id == msg.from_user.id:
-                            user_already_tagged = True
-                            break
-                    
-                    if not user_already_tagged:
-                        success = await tag_user(
-                            context, chat_id, msg.from_user.id,
-                            msg.from_user.first_name, tag_type, tag_text
-                        )
-                        
-                        if success:
-                            tagged_count += 1
-                            if chat_id in active_tag_sessions:
-                                active_tag_sessions[chat_id]["tagged"] = tagged_count
-                        else:
-                            failed_count += 1
-                        
-                        await asyncio.sleep(random.uniform(2, 3))
-                        
-                        # Stop after 20 users to avoid flooding
-                        if tagged_count >= 20:
-                            break
-        except Exception as e:
-            print(f"Error getting chat history: {e}")
+            # Create tag message
+            if tag_type == "gn":
+                message = f"[{user_name}](tg://user?id={user_id}) {random.choice(TAGMES)}"
+            elif tag_type == "gm":
+                message = f"[{user_name}](tg://user?id={user_id}) {random.choice(VC_TAG)}"
+            else:
+                message = f"[{user_name}](tg://user?id={user_id}) {tag_text}"
+            
+            # Send tag
+            try:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=message,
+                    parse_mode=ParseMode.MARKDOWN,
+                    disable_web_page_preview=True
+                )
+                tagged_count += 1
+                active_tag_sessions[chat_id]["tagged"] = tagged_count
+                
+            except Forbidden:
+                # User blocked bot
+                failed_count += 1
+                active_tag_sessions[chat_id]["failed"] = failed_count
+            except Exception as e:
+                print(f"Error tagging {user_name}: {e}")
+                failed_count += 1
+                active_tag_sessions[chat_id]["failed"] = failed_count
+            
+            # Progress update every 15 users
+            if (i + 1) % 15 == 0:
+                progress = (
+                    f"📊 **Progress: {i+1}/{len(all_members)}**\n"
+                    f"✅ Tagged: {tagged_count}\n"
+                    f"❌ Failed: {failed_count}\n"
+                    f"⏳ Remaining: {len(all_members) - (i+1)} users"
+                )
+                try:
+                    await context.bot.send_message(chat_id, progress)
+                except:
+                    pass
+            
+            # Delay (adjust based on group size)
+            delay = 1.5 if len(all_members) > 50 else 2.0
+            await asyncio.sleep(delay)
         
-        # Completion message
-        if chat_id in active_tag_sessions and active_tag_sessions[chat_id].get("stop"):
-            await context.bot.send_message(
-                chat_id,
-                f"🛑 Tagging stopped!\n✅ Tagged {tagged_count} users\n❌ Failed: {failed_count}"
+        # Final message
+        if active_tag_sessions[chat_id]["stop"]:
+            final_msg = (
+                f"🛑 **Tagging Stopped**\n"
+                f"━━━━━━━━━━━━━━\n"
+                f"✅ Tagged: {tagged_count} users\n"
+                f"❌ Failed: {failed_count}\n"
+                f"⏹️ Process was cancelled"
             )
         else:
-            completion_msg = f"""
-✅ **Tagging Complete!**
-━━━━━━━━━━━━━━
-📊 **Statistics:**
-• Successfully Tagged: {tagged_count}
-• Failed: {failed_count}
-• Total Attempted: {tagged_count + failed_count}
-━━━━━━━━━━━━━━
-🎯 Tagged recent active users and admins!
-            """
-            await context.bot.send_message(chat_id, completion_msg, parse_mode=ParseMode.MARKDOWN)
+            final_msg = (
+                f"🎉 **TAGGING COMPLETE!**\n"
+                f"━━━━━━━━━━━━━━\n"
+                f"📊 **Final Statistics**\n"
+                f"• Total Members Found: {len(all_members)}\n"
+                f"• Successfully Tagged: {tagged_count}\n"
+                f"• Failed: {failed_count}\n"
+                f"• Success Rate: {(tagged_count/len(all_members))*100:.1f}%\n"
+                f"━━━━━━━━━━━━━━\n"
+                f"✅ **All available members have been tagged!**"
+            )
+        
+        await context.bot.send_message(chat_id, final_msg, parse_mode=ParseMode.MARKDOWN)
         
     except Exception as e:
-        print(f"Tagging error: {e}")
-        await context.bot.send_message(chat_id, f"❌ Error during tagging: {str(e)[:100]}")
+        print(f"Admin tagging error: {e}")
+        await context.bot.send_message(chat_id, f"❌ Error: {str(e)[:200]}")
     finally:
-        # Clean up session
         if chat_id in active_tag_sessions:
             del active_tag_sessions[chat_id]
 
@@ -288,8 +308,8 @@ async def tag_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Tagging is already running! Use /tagstop to stop.")
         return
     
-    # Check admin
-    if not await is_admin(chat.id, user.id, context):
+    # Check if user is admin
+    if not await is_user_admin(chat.id, user.id, context):
         await update.message.reply_text("❌ You need to be an admin to use this command!")
         return
     
@@ -308,24 +328,22 @@ async def tag_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Start tagging session
-    active_tag_sessions[chat.id] = {"stop": False, "tagged": 0}
-    
-    # Run tagging in background
+    # Start background task
     asyncio.create_task(
-        simple_tag_members(context, chat.id, tag_text, "custom")
+        tag_all_members_admin(context, chat.id, tag_text, "custom")
     )
     
     await update.message.reply_text(
-        f"🎯 **Started Custom Tagging!**\n\n"
+        f"🚀 **ADMIN TAG STARTED**\n\n"
         f"📝 Message: `{tag_text[:50]}...`\n"
-        f"⏳ Tagging admins and recent active users...\n"
-        f"🛑 Use `/tagstop` to cancel.",
+        f"👑 Bot Admin Mode: **ACTIVE**\n"
+        f"🔍 Collecting ALL members...\n"
+        f"🛑 Use `/tagstop` to cancel",
         parse_mode=ParseMode.MARKDOWN
     )
 
 async def tag_all_gm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /gmtag command (Good Morning tag)"""
+    """Handle /gmtag command"""
     user = update.effective_user
     chat = update.effective_chat
     
@@ -333,33 +351,29 @@ async def tag_all_gm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ This command only works in groups!")
         return
     
-    # Check if already running
     if chat.id in active_tag_sessions:
         await update.message.reply_text("⚠️ Tagging is already running! Use /tagstop to stop.")
         return
     
-    # Check admin
-    if not await is_admin(chat.id, user.id, context):
+    if not await is_user_admin(chat.id, user.id, context):
         await update.message.reply_text("❌ You need to be an admin to use this command!")
         return
     
-    # Start tagging session
-    active_tag_sessions[chat.id] = {"stop": False, "tagged": 0}
-    
-    # Run tagging in background
+    # Start background task
     asyncio.create_task(
-        simple_tag_members(context, chat.id, "", "gm")
+        tag_all_members_admin(context, chat.id, "", "gm")
     )
     
     await update.message.reply_text(
-        "🌅 **Started Good Morning Tagging!**\n\n"
-        "⏳ Tagging admins and recent active users...\n"
-        "🛑 Use `/tagstop` to cancel.",
+        "🌅 **GOOD MORNING TAG STARTED**\n\n"
+        "👑 Bot Admin Mode: **ACTIVE**\n"
+        "🔍 Tagging ALL members...\n"
+        "🛑 Use `/tagstop` to cancel",
         parse_mode=ParseMode.MARKDOWN
     )
 
 async def tag_all_gn(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /gntag command (Good Night tag)"""
+    """Handle /gntag command"""
     user = update.effective_user
     chat = update.effective_chat
     
@@ -367,61 +381,29 @@ async def tag_all_gn(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ This command only works in groups!")
         return
     
-    # Check if already running
     if chat.id in active_tag_sessions:
         await update.message.reply_text("⚠️ Tagging is already running! Use /tagstop to stop.")
         return
     
-    # Check admin
-    if not await is_admin(chat.id, user.id, context):
+    if not await is_user_admin(chat.id, user.id, context):
         await update.message.reply_text("❌ You need to be an admin to use this command!")
         return
     
-    # Start tagging session
-    active_tag_sessions[chat.id] = {"stop": False, "tagged": 0}
-    
-    # Run tagging in background
+    # Start background task
     asyncio.create_task(
-        simple_tag_members(context, chat.id, "", "gn")
+        tag_all_members_admin(context, chat.id, "", "gn")
     )
     
     await update.message.reply_text(
-        "🌙 **Started Good Night Tagging!**\n\n"
-        "⏳ Tagging admins and recent active users...\n"
-        "🛑 Use `/tagstop` to cancel.",
+        "🌙 **GOOD NIGHT TAG STARTED**\n\n"
+        "👑 Bot Admin Mode: **ACTIVE**\n"
+        "🔍 Tagging ALL members...\n"
+        "🛑 Use `/tagstop` to cancel",
         parse_mode=ParseMode.MARKDOWN
     )
 
-async def tag_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Stop tagging process"""
-    user = update.effective_user
-    chat = update.effective_chat
-    
-    if chat.id not in active_tag_sessions:
-        await update.message.reply_text("ℹ️ No tagging process is currently running.")
-        return
-    
-    # Check admin
-    if not await is_admin(chat.id, user.id, context):
-        await update.message.reply_text("❌ You need to be an admin to stop tagging!")
-        return
-    
-    # Mark for stopping
-    active_tag_sessions[chat.id]["stop"] = True
-    await update.message.reply_text("🛑 Stopping tagging process... Please wait.")
-
-async def tag_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Check tagging status"""
-    chat = update.effective_chat
-    
-    if chat.id in active_tag_sessions:
-        tagged = active_tag_sessions[chat.id].get("tagged", 0)
-        await update.message.reply_text(f"🔄 Tagging is running...\n✅ Tagged: {tagged} users")
-    else:
-        await update.message.reply_text("ℹ️ No active tagging session.")
-
 async def tag_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Test tag command - tags 3 users only"""
+    """Test tag - tags 5 members"""
     user = update.effective_user
     chat = update.effective_chat
     
@@ -429,22 +411,26 @@ async def tag_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ This command only works in groups!")
         return
     
-    # Check admin
-    if not await is_admin(chat.id, user.id, context):
+    if not await is_user_admin(chat.id, user.id, context):
         await update.message.reply_text("❌ You need to be an admin to use this command!")
         return
     
-    await update.message.reply_text("🧪 Testing tag function...")
+    await update.message.reply_text("🧪 Testing admin tag function...")
     
     try:
-        # Get chat admins
-        admins = await context.bot.get_chat_administrators(chat.id)
+        # Get members
+        members = await get_all_members_as_admin(chat.id, context)
+        if not members:
+            await update.message.reply_text("❌ No members found!")
+            return
         
-        # Tag first 3 admins (excluding bots)
+        # Take first 5 members
+        members_to_tag = members[:5]
+        
         tagged = 0
-        for admin in admins[:3]:
-            if not admin.user.is_bot:
-                message = f"[{admin.user.first_name}](tg://user?id={admin.user.id}) Test tag from bot! 🎯"
+        for user_obj in members_to_tag:
+            try:
+                message = f"[{user_obj.first_name}](tg://user?id={user_obj.id}) Test tag from admin bot! 🎯"
                 await context.bot.send_message(
                     chat_id=chat.id,
                     text=message,
@@ -452,91 +438,134 @@ async def tag_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 tagged += 1
                 await asyncio.sleep(1)
+            except:
+                pass
         
-        await update.message.reply_text(f"✅ Successfully tagged {tagged} users!")
+        await update.message.reply_text(
+            f"✅ **Test Complete!**\n"
+            f"Tagged {tagged}/5 members successfully.\n"
+            f"Total members found: {len(members)}"
+        )
         
     except Exception as e:
         await update.message.reply_text(f"❌ Test failed: {str(e)}")
 
-async def manual_tag(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Manual tag specific users"""
-    user = update.effective_user
+async def check_bot_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Check if bot is admin"""
     chat = update.effective_chat
     
     if chat.type == 'private':
         await update.message.reply_text("❌ This command only works in groups!")
         return
     
-    # Check admin
-    if not await is_admin(chat.id, user.id, context):
-        await update.message.reply_text("❌ You need to be an admin to use this command!")
+    is_admin = await is_bot_admin(chat.id, context)
+    
+    if is_admin:
+        await update.message.reply_text(
+            "✅ **Bot is Admin!**\n"
+            "👑 All tag commands will work properly.\n"
+            "🔍 Can access all group members."
+        )
+    else:
+        await update.message.reply_text(
+            "❌ **Bot is NOT Admin!**\n"
+            "Please make me admin with these permissions:\n"
+            "• Delete messages\n"
+            "• Invite users\n"
+            "• Pin messages\n\n"
+            "Without admin rights, I can only tag:\n"
+            "• Other admins\n"
+            "• Recent message senders"
+        )
+
+async def tag_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Stop tagging"""
+    user = update.effective_user
+    chat = update.effective_chat
+    
+    if chat.id not in active_tag_sessions:
+        await update.message.reply_text("ℹ️ No tagging process is running.")
         return
     
-    if not context.args:
-        await update.message.reply_text("Usage: `/manual_tag @username1 @username2`")
+    if not await is_user_admin(chat.id, user.id, context):
+        await update.message.reply_text("❌ You need to be an admin to stop tagging!")
         return
     
-    await update.message.reply_text("🔸 Starting manual tagging...")
+    active_tag_sessions[chat.id]["stop"] = True
+    await update.message.reply_text("🛑 Stopping tagging process...")
+
+async def tag_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Check status"""
+    chat = update.effective_chat
     
-    tagged = 0
-    for arg in context.args:
-        if arg.startswith('@'):
-            username = arg[1:]
-            try:
-                message = f"Hello {arg}! 👋"
-                await context.bot.send_message(
-                    chat_id=chat.id,
-                    text=message,
-                    parse_mode=ParseMode.MARKDOWN
-                )
-                tagged += 1
-                await asyncio.sleep(2)
-            except Exception as e:
-                print(f"Failed to tag {arg}: {e}")
-    
-    await update.message.reply_text(f"✅ Manually tagged {tagged} users!")
+    if chat.id in active_tag_sessions:
+        session = active_tag_sessions[chat.id]
+        status_msg = (
+            f"🔄 **Tagging in Progress**\n"
+            f"━━━━━━━━━━━━━━\n"
+            f"✅ Tagged: {session.get('tagged', 0)}\n"
+            f"❌ Failed: {session.get('failed', 0)}\n"
+            f"📊 Total: {session.get('total', 0)}\n"
+            f"⏳ Progress: {(session.get('tagged', 0)/session.get('total', 1))*100:.1f}%\n"
+            f"━━━━━━━━━━━━━━\n"
+            f"👑 **Admin Mode: ACTIVE**"
+        )
+        await update.message.reply_text(status_msg, parse_mode=ParseMode.MARKDOWN)
+    else:
+        await update.message.reply_text("ℹ️ No active tagging session.")
 
 # ==================== REGISTER HANDLERS ====================
 def register_handlers(app: Application):
-    """Register all handlers for this plugin"""
+    """Register all handlers"""
     app.add_handler(CommandHandler("tagall", tag_all))
     app.add_handler(CommandHandler("gmtag", tag_all_gm))
     app.add_handler(CommandHandler("gntag", tag_all_gn))
     app.add_handler(CommandHandler("tagstop", tag_stop))
     app.add_handler(CommandHandler("tagstatus", tag_status))
     app.add_handler(CommandHandler("tagtest", tag_test))
-    app.add_handler(CommandHandler("manual_tag", manual_tag))
-    app.add_handler(CommandHandler(["tagcancel", "cancletag"], tag_stop))
+    app.add_handler(CommandHandler("checkadmin", check_bot_admin))
     app.add_handler(CommandHandler("taghelp", tag_help))
     
-    print("✅ Tagger Plugin Loaded Successfully!")
+    print("✅ Admin Tagger Plugin Loaded Successfully!")
 
 async def tag_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show help for tag commands"""
+    """Show help"""
     help_text = """
-🎯 **TAGGER PLUGIN COMMANDS:**
+👑 **ADMIN TAGGER PLUGIN**
 
-**For Admins Only:**
-• `/tagall [text]` - Tag with custom text
-• `/tagall` (reply to message) - Tag with replied message
-• `/gmtag` - Good Morning tag
-• `/gntag` - Good Night tag
-• `/tagstop` - Stop tagging
-• `/tagstatus` - Check status
-• `/tagtest` - Test tag (tags 3 users)
-• `/manual_tag @user1 @user2` - Manual tag
-• `/taghelp` - Show help
+**For Group Admins Only:**
+• `/tagall [text]` - Tag ALL members with custom text
+• `/gmtag` - Good Morning tag for ALL members
+• `/gntag` - Good Night tag for ALL members
+• `/tagstop` - Stop ongoing tagging
+• `/tagstatus` - Check tagging progress
+• `/tagtest` - Test tag (tags 5 members)
+• `/checkadmin` - Check if bot is admin
+• `/taghelp` - Show this help
 
-**Examples:**
-`/tagall Hello everyone!`
-`/tagall` (reply to a message)
-`/gmtag` - Good Morning to all
-`/tagtest` - Test the bot
+**REQUIREMENTS:**
+1. 🤖 **Bot must be group admin**
+2. 👮 **User must be admin to use commands**
+3. ✅ **Bot needs these permissions:**
+   • Delete messages
+   • Invite users
+   • Pin messages
 
-⚠️ **Note:** Tags recent active users and admins
+**How it works when bot is admin:**
+✅ Tags ALL group members (not just admins)
+✅ Collects members from:
+   • All chat members (admin access)
+   • Administrators list
+   • Recent message history
+✅ Shows real-time progress
+✅ Can be stopped anytime
+
+**Note:**
+• Large groups may take time (1.5s delay between tags)
+• Some users may block the bot (will be skipped)
+• Use `/tagtest` first to verify
     """
     await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
 
-# For direct testing
 if __name__ == "__main__":
-    print("🧪 Tagger Plugin Ready!")
+    print("👑 ADMIN TAGGER PLUGIN READY!")
