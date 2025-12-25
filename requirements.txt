@@ -7,7 +7,7 @@ psutil
 pytz
 edge-tts
 ffmpeg-python
-tgcrypto==1.2.5
+tgcrypto==1.0.9
 py-tgcalls==1.0.1
 nest_asyncio
 Pillow
