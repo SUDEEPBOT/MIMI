@@ -1,8 +1,8 @@
 from pyrogram import Client
 from pytgcalls import PyTgCalls
 
-# py-tgcalls 0.9.7 ONLY
-from pytgcalls.types.input_stream import InputStream
+# py-tgcalls 0.9.7 imports
+from pytgcalls.types import InputAudioStream, InputStream
 from pytgcalls.types.input_stream.quality import HighQualityAudio
 
 from config import API_ID, API_HASH, SESSION, LOGGER_ID
@@ -38,7 +38,6 @@ async def start_music_worker():
 
         print("✅ Music Assistant Started")
 
-        # Logger GC message
         try:
             await worker.send_message(
                 LOGGER_ID,
@@ -75,12 +74,17 @@ async def play_stream(chat_id, file_path, title, duration, user):
 
     # 2️⃣ Not playing → Join VC & Play
     try:
+        # FIXED: Wrapped in InputAudioStream
+        stream = InputStream(
+            InputAudioStream(
+                file_path,
+                parameters=HighQualityAudio()
+            )
+        )
+
         await call_py.join_group_call(
             int(chat_id),
-            InputStream(
-                file_path,          # ✅ string path ONLY
-                HighQualityAudio(), # ✅ quality object
-            ),
+            stream,
         )
 
         add_active_chat(chat_id)
@@ -115,12 +119,17 @@ async def stream_end_handler(_, update):
             return
 
         try:
+            # FIXED: Wrapped in InputAudioStream
+            stream = InputStream(
+                InputAudioStream(
+                    file_path,
+                    parameters=HighQualityAudio()
+                )
+            )
+
             await call_py.change_stream(
                 chat_id,
-                InputStream(
-                    file_path,
-                    HighQualityAudio(),
-                ),
+                stream,
             )
         except Exception as e:
             print(f"❌ Auto-Play Error: {e}")
@@ -151,3 +160,4 @@ async def stop_stream(chat_id):
     except Exception as e:
         print(f"❌ Stop Error: {e}")
         return False
+        
