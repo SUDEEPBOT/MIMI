@@ -5,14 +5,18 @@ import aiohttp
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 from youtubesearchpython.__future__ import VideosSearch
 
-# --- SETUP PATHS ---
-# Make sure your repo has an 'assets' folder with these files
-FONT_MAIN = "assets/font.ttf"
-FONT_BOLD = "assets/font2.ttf" 
-FONT_TITLE = "assets/font3.ttf"
-PLAY_ICON = "assets/play_icons.png"
+# --- SETUP PATHS (DYNAMIC) ---
+# Ye script jahan hai (tools folder), wahi par assets dhundega
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+ASSETS_DIR = os.path.join(CURRENT_DIR, "assets")
 
-# Cache Folder Creation
+# Paths define kar rahe hain
+FONT_MAIN = os.path.join(ASSETS_DIR, "font.ttf")
+FONT_BOLD = os.path.join(ASSETS_DIR, "font2.ttf")
+FONT_TITLE = os.path.join(ASSETS_DIR, "font3.ttf")
+PLAY_ICON = os.path.join(ASSETS_DIR, "play_icons.png")
+
+# Cache Folder (Root mein banega taaki easy clean ho)
 if not os.path.exists("cache"):
     os.makedirs("cache")
 
@@ -69,11 +73,10 @@ def crop_center_circle(img, output_size, border, crop_scale=1.5):
     return result
 
 async def get_thumb(videoid):
-    # Check if already generated
+    # Check cache
     if os.path.isfile(f"cache/{videoid}_v4.png"):
         return f"cache/{videoid}_v4.png"
 
-    # Fetch Details
     url = f"https://www.youtube.com/watch?v={videoid}"
     try:
         results = VideosSearch(url, limit=1)
@@ -98,10 +101,9 @@ async def get_thumb(videoid):
             except:
                 channel = "Unknown Channel"
     except Exception as e:
-        print(f"Thumbnail Info Error: {e}")
+        print(f"Thumb Info Error: {e}")
         return None
 
-    # Download Thumbnail
     async with aiohttp.ClientSession() as session:
         async with session.get(thumbnail) as resp:
             if resp.status == 200:
@@ -109,7 +111,6 @@ async def get_thumb(videoid):
                 await f.write(await resp.read())
                 await f.close()
 
-    # Process Image
     try:
         youtube = Image.open(f"cache/thumb{videoid}.png")
         image1 = changeImageSize(1280, 720, youtube)
@@ -119,35 +120,31 @@ async def get_thumb(videoid):
         background = enhancer.enhance(0.6)
         draw = ImageDraw.Draw(background)
 
-        # Fonts Load (Safe Mode: Agar font nahi mile to Default use karega)
+        # Fonts Load Check
         try:
             arial = ImageFont.truetype(FONT_BOLD, 30)
             font = ImageFont.truetype(FONT_MAIN, 30)
             title_font = ImageFont.truetype(FONT_TITLE, 45)
-        except:
-            # Fallback if fonts missing
-            print("⚠️ Warning: Custom fonts not found in 'assets/'. Using default.")
+        except Exception as e:
+            print(f"⚠️ Fonts missing in tools/assets! Using default. Error: {e}")
             arial = ImageFont.load_default()
             font = ImageFont.load_default()
             title_font = ImageFont.load_default()
 
-        # Circle Image
         circle_thumbnail = crop_center_circle(youtube, 400, 20)
         circle_thumbnail = circle_thumbnail.resize((400, 400))
         circle_position = (120, 160)
         background.paste(circle_thumbnail, circle_position, circle_thumbnail)
 
-        # Text Logic
         text_x_position = 565
         title1 = truncate(title)
         draw.text((text_x_position, 180), title1[0], fill=(255, 255, 255), font=title_font)
         draw.text((text_x_position, 230), title1[1], fill=(255, 255, 255), font=title_font)
         draw.text((text_x_position, 320), f"{channel}  |  {views[:23]}", (255, 255, 255), font=arial)
 
-        # Progress Bar
         line_length = 580
         red_length = int(line_length * 0.6)
-        
+
         start_point_red = (text_x_position, 380)
         end_point_red = (text_x_position + red_length, 380)
         draw.line([start_point_red, end_point_red], fill="red", width=9)
@@ -164,13 +161,14 @@ async def get_thumb(videoid):
         draw.text((text_x_position, 400), "00:00", (255, 255, 255), font=arial)
         draw.text((1080, 400), duration, (255, 255, 255), font=arial)
 
-        # Paste Icons (If exists)
+        # Play Icon Check
         if os.path.exists(PLAY_ICON):
             play_icons = Image.open(PLAY_ICON)
             play_icons = play_icons.resize((580, 62))
             background.paste(play_icons, (text_x_position, 450), play_icons)
+        else:
+            print("⚠️ Play Icon missing in tools/assets")
 
-        # Cleanup
         try:
             os.remove(f"cache/thumb{videoid}.png")
         except:
@@ -180,6 +178,6 @@ async def get_thumb(videoid):
         return f"cache/{videoid}_v4.png"
         
     except Exception as e:
-        print(f"Image Processing Error: {e}")
+        print(f"Processing Error: {e}")
         return None
-          
+    
