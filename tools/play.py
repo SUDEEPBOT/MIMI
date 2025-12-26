@@ -1,124 +1,96 @@
 import uuid
-from telegram import Update
+import os
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode, ChatAction
-from telegram.ext import CommandHandler, ContextTypes
-from pymongo import MongoClient
-from config import MONGO_URL, BOT_NAME, ASSISTANT_ID # 🔥 Config check kar lena
-
-# --- DATABASE CONNECTION ---
-try:
-    mongo = MongoClient(MONGO_URL)
-    db = mongo["Music_Database"]
-    queue_col = db["Music_Queue"]
-    print("✅ Music Database Connected in PTB!")
-except Exception as e:
-    print(f"❌ Database Error in play.py: {e}")
+from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler
+from config import MONGO_DB_URI, BOT_NAME, ASSISTANT_ID # Config check kar lena
+from tools.stream import play_stream # Tumhare stream logic se connect kiya
 
 # --- PLAY COMMAND ---
 async def play_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     user = update.effective_user
+    message = update.message
     
-    # 1. No Song Name Provided
     if not context.args:
-        text = f"""
-<blockquote><b>❌ Incorrect Usage</b></blockquote>
-
-<b>Usage:</b> <code>/play [Song Name]</code>
-<b>Example:</b> <code>/play Arjan Valley</code>
-"""
-        return await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        text = f"<blockquote><b>❌ Incorrect Usage</b></blockquote>\n\n<b>Usage:</b> <code>/play [Song Name]</code>"
+        return await message.reply_text(text, parse_mode=ParseMode.HTML)
 
     song_name = " ".join(context.args)
-    
-    # 2. Searching Message (Fancy)
-    search_text = f"""
-<blockquote><b>🔍 Searching...</b></blockquote>
-<code>{song_name}</code>
-"""
-    status_msg = await update.message.reply_text(search_text, parse_mode=ParseMode.HTML)
-    await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
+    status_msg = await message.reply_text(f"<blockquote><b>🔍 Searching...</b></blockquote>\n<code>{song_name}</code>", parse_mode=ParseMode.HTML)
 
     try:
-        # 3. Invite Link Logic
+        # --- STEP 1: ASSISTANT PRESENCE CHECK ---
         try:
-            invite_link = await context.bot.export_chat_invite_link(chat.id)
-        except:
-            err_text = """
-<blockquote><b>❌ Permission Error</b></blockquote>
-Please make me an <b>Admin</b> with <b>Invite Users</b> permission so the assistant can join.
-"""
-            return await status_msg.edit_text(err_text, parse_mode=ParseMode.HTML)
+            assistant_member = await chat.get_member(int(ASSISTANT_ID))
+            # Agar Assistant Ban hai
+            if assistant_member.status in ["kicked", "banned"]:
+                keyboard = [[InlineKeyboardButton("✅ Unban Assistant", callback_data=f"unban_assist_{ASSISTANT_ID}")]]
+                return await status_msg.edit_text(
+                    f"<blockquote><b>❌ Assistant Banned</b></blockquote>\nAssistant is banned in <b>{chat.title}</b>.\n\nClick below to unban!",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode=ParseMode.HTML
+                )
+        except Exception:
+            # Assistant Group mein nahi hai, toh join karwane ka try karenge
+            try:
+                invite_link = await context.bot.export_chat_invite_link(chat.id)
+                # Hum Assistant (Userbot) ko bolenge join karne ko (via stream logic)
+                from tools.stream import worker 
+                await worker.join_chat(invite_link)
+            except Exception as e:
+                return await status_msg.edit_text(
+                    f"<blockquote><b>❌ Assistant Missing</b></blockquote>\nMake me <b>Admin</b> with <b>Invite Users</b> permission so I can bring the assistant!",
+                    parse_mode=ParseMode.HTML
+                )
 
-        # 4. DB Entry
-        task = {
-            "chat_id": chat.id,
-            "title": chat.title,
-            "link": invite_link,
-            "song": song_name,
-            "requester": user.first_name,
-            "requester_id": user.id,
-            "status": "pending",
-            "timestamp": update.message.date
-        }
+        # --- STEP 2: PLAY LOGIC ---
+        # Yahan hum tumhare stream.py ke play_stream function ko call kar rahe hain
+        from tools.stream import play_stream
+        # Maan lete hain tumhare paas download logic hai jo file_path deta hai
+        # Abhi ke liye hum direct stream logic handle kar rahe hain
         
-        queue_col.insert_one(task)
+        success, result = await play_stream(chat.id, song_name, song_name, 0, user.first_name)
 
-        # 5. Success Message (Fully Decorated)
-        success_text = f"""
-<blockquote><b>✅ Added to Queue</b></blockquote>
+        if success:
+            success_text = f"""
+<blockquote><b>✅ Playing Started</b></blockquote>
 
 <b>🎶 Title :</b> {song_name}
-<b>👤 Request By :</b> {user.first_name}
-<b>⏳ Status :</b> <code>Processing...</code>
-
-<blockquote><i>Assistant is joining via Invite Link...</i></blockquote>
+<b>👤 Requested By :</b> {user.first_name}
+<b>✨ Status :</b> <code>Streaming...</code>
 """
-        await status_msg.edit_text(success_text, parse_mode=ParseMode.HTML)
+            await status_msg.edit_text(success_text, parse_mode=ParseMode.HTML)
+        else:
+            await status_msg.edit_text(f"<blockquote><b>⌛ Added to Queue</b></blockquote>\nPosition: <code>{result}</code>", parse_mode=ParseMode.HTML)
 
     except Exception as e:
-        await status_msg.edit_text(f"<blockquote><b>❌ System Error</b></blockquote>\n<code>{str(e)}</code>", parse_mode=ParseMode.HTML)
+        await status_msg.edit_text(f"<blockquote><b>❌ Play Error</b></blockquote>\n<code>{str(e)}</code>", parse_mode=ParseMode.HTML)
 
-# --- STOP COMMAND (FORCE STOP) 🛑 ---
-async def stop_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# --- CALLBACK FOR UNBAN BUTTON ---
+async def unban_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
     chat = update.effective_chat
-    
-    # 1. Permission Check
-    user_member = await chat.get_member(update.effective_user.id)
-    if user_member.status not in ["administrator", "creator"]:
-        return await update.message.reply_text("<blockquote><b>❌ Access Denied</b></blockquote>\nOnly Admins can stop music.", parse_mode=ParseMode.HTML)
+    data = query.data
 
-    msg = await update.message.reply_text("<blockquote><b>🛑 Stopping...</b></blockquote>", parse_mode=ParseMode.HTML)
+    if data.startswith("unban_assist_"):
+        # Admin Check
+        user_member = await chat.get_member(query.from_user.id)
+        if user_member.status not in ["administrator", "creator"]:
+            return await query.answer("❌ Only Admins can unban!", show_alert=True)
 
-    try:
-        # 2. Clear Database Queue
-        queue_col.delete_many({"chat_id": chat.id})
-        
-        # 3. Kick Assistant
         try:
-            await chat.ban_member(ASSISTANT_ID)
-            await chat.unban_member(ASSISTANT_ID)
-            
-            stop_text = f"""
-<blockquote><b>🛑 Music Stopped</b></blockquote>
-
-<b>🗑 Queue :</b> Cleared
-<b>👋 Assistant :</b> Disconnected
-"""
-            await msg.edit_text(stop_text, parse_mode=ParseMode.HTML)
-            
+            await chat.unban_member(int(ASSISTANT_ID))
+            await query.answer("✅ Assistant Unbanned!", show_alert=True)
+            await query.edit_message_text(
+                "<blockquote><b>✅ Assistant Unbanned</b></blockquote>\nThanks for unbanning! You can now use <code>/play</code> again.",
+                parse_mode=ParseMode.HTML
+            )
         except Exception as e:
-            warn_text = f"""
-<blockquote><b>⚠️ Partial Success</b></blockquote>
-Queue cleared, but failed to kick Assistant.
-<b>Reason:</b> <code>Check ID or Admin Rights</code>
-"""
-            await msg.edit_text(warn_text, parse_mode=ParseMode.HTML)
-            
-    except Exception as e:
-        await msg.edit_text(f"❌ Error: {e}")
+            await query.answer(f"❌ Error: {e}", show_alert=True)
 
 # --- REGISTER HANDLERS ---
 def register_handlers(app):
     app.add_handler(CommandHandler(["play", "p"], play_music))
-    app.add_handler(CommandHandler(["stop", "end", "leave", "skip"], stop_music))
+    app.add_handler(CallbackQueryHandler(unban_button_click, pattern="^unban_assist_"))
+    
