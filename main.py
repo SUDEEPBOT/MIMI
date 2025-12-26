@@ -23,6 +23,7 @@ from tts import generate_voice
 from tools.stream import start_music_worker
 
 # MODULES (OLD ONES - Hardcoded)
+# Note: Agar tumne admin.py tools me daal diya hai to yahan se hata dena
 import admin, start, group, leaderboard, pay, bet, wordseek, grouptools, chatstat, logger, events, info, tictactoe, couple
 import livetime  
 import dmspam 
@@ -114,7 +115,7 @@ async def on_startup(application: Application):
 <blockquote>
 <b>🤖 ʙᴏᴛ ɴᴀᴍᴇ :</b> {BOT_NAME}
 <b>🆔 ʙᴏᴛ ɪᴅ :</b> <code>{me.id}</code>
-<b>🔗 ᴜsᴇʀɴᴀᴍᴇ :</b> {username}
+<b>🔗 ᴜsᴇʀɴᴀᴍᴇ :</b> @{username}
 </blockquote>
 """
             await application.bot.send_message(chat_id=logger_id, text=txt, parse_mode=ParseMode.HTML)
@@ -342,7 +343,7 @@ def main():
     
     # --- A. EXISTING HANDLERS (Hardcoded) ---
     app.add_handler(CommandHandler("start", start.start))
-    # Removed hardcoded help handler: app.add_handler(CommandHandler("help", help.help_command))
+    # Removed hardcoded help handler as it is now in tools/help.py
     app.add_handler(CommandHandler("admin", admin.admin_panel))
     
     app.add_handler(CommandHandler("info", info.user_info))
@@ -393,6 +394,7 @@ def main():
     
     app.add_handler(MessageHandler(filters.Regex(r'(?i)^[\./]crank'), chatstat.show_leaderboard))
     
+    # Old hardcoded group tools logic. If you are using tools/admin.py, you can comment these out later.
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]id$'), grouptools.get_id))
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]warn$'), grouptools.warn_user))
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]mute$'), grouptools.mute_user))
@@ -403,7 +405,7 @@ def main():
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]pin$'), grouptools.pin_message))
     
     # --- B. NEW MODULES (TOOLS FOLDER - AUTO LOAD) ---
-    # Help handler will be loaded from here once you create tools/help.py
+    # help.py, music.py, admin.py yahan se load honge
     load_plugins(app)
 
     # --- C. MESSAGE HANDLER (LAST PRIORITY) ---
