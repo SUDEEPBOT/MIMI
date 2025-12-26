@@ -19,8 +19,10 @@ from database import (
 from ai_chat import get_yuki_response, get_mimi_sticker
 from tts import generate_voice 
 
+# ✅ NEW IMPORT: Music Assistant ko start karne ke liye
+from tools.stream import start_music_worker
+
 # MODULES (OLD ONES - Hardcoded)
-# Removed 'help' import as per request to move it to tools
 import admin, start, group, leaderboard, pay, bet, wordseek, grouptools, chatstat, logger, events, info, tictactoe, couple
 import livetime  
 import dmspam 
@@ -92,6 +94,13 @@ def load_plugins(application: Application):
 async def on_startup(application: Application):
     print(f"🚀 {BOT_NAME} IS STARTING...")
     
+    # ✅ FIX: Music Assistant Start Logic Added Here
+    print("🔵 Starting Music Assistant...")
+    try:
+        await start_music_worker()
+    except Exception as e:
+        print(f"❌ Assistant Start Failed: {e}")
+
     # Logger Logic
     logger_id = get_logger_group()
     if logger_id:
@@ -405,4 +414,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-                                      
+        
