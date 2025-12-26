@@ -24,7 +24,7 @@ def get_automated_wish(wish_type):
     
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
         prompt = (
             f"Act as Aniya (Cute Bestie). "
@@ -92,7 +92,7 @@ def get_yuki_response(user_id, user_text, user_name):
             # 🔥 Safety Settings REMOVED as requested
             
             model = genai.GenerativeModel(
-                'gemini-1.5-flash', 
+                'gemini-2.5-flash', 
                 generation_config={"max_output_tokens": 60, "temperature": 0.7}
             )
             
