@@ -1,6 +1,6 @@
 import random
 import os
-import importlib # 🔥 Added for Auto-Loader
+import importlib 
 from threading import Thread
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -19,12 +19,11 @@ from database import (
 from ai_chat import get_yuki_response, get_mimi_sticker
 from tts import generate_voice 
 
-# ✅ NEW IMPORT: Music Assistant ko start karne ke liye
+# ✅ Music Assistant Import
 from tools.stream import start_music_worker
 
-# MODULES (OLD ONES - Hardcoded)
-# Note: Agar tumne admin.py tools me daal diya hai to yahan se hata dena
-import admin, start, group, leaderboard, pay, bet, wordseek, grouptools, chatstat, logger, events, info, tictactoe, couple
+# MODULES (Removed 'grouptools' from here)
+import admin, start, group, leaderboard, pay, bet, wordseek, chatstat, logger, events, info, tictactoe, couple
 import livetime  
 import dmspam 
 import bank 
@@ -46,11 +45,7 @@ SHOP_ITEMS = {
     "rich":  {"name": "💸 Rich", "price": 100000}
 }
 
-async def delete_job(context):
-    try: await context.bot.delete_message(context.job.chat_id, context.job.data)
-    except: pass
-
-# --- 🔌 AUTO LOADER FUNCTION (NEW) ---
+# --- 🔌 AUTO LOADER FUNCTION ---
 def load_plugins(application: Application):
     """
     Tools folder ke andar jitni bhi python files hain, 
@@ -58,7 +53,6 @@ def load_plugins(application: Application):
     """
     plugin_dir = "tools"
     
-    # Check agar folder nahi hai toh bana do
     if not os.path.exists(plugin_dir):
         try:
             os.makedirs(plugin_dir)
@@ -67,7 +61,6 @@ def load_plugins(application: Application):
             pass
         return
 
-    # Folder ke andar ki files scan karo
     path_list = [
         f for f in os.listdir(plugin_dir) 
         if f.endswith(".py") and f != "__init__.py"
@@ -76,18 +69,14 @@ def load_plugins(application: Application):
     print(f"🔌 Loading {len(path_list)} plugins from '{plugin_dir}'...")
 
     for file in path_list:
-        module_name = file[:-3]  # .py hatao
+        module_name = file[:-3]
         try:
-            # Dynamic Import
             module = importlib.import_module(f"{plugin_dir}.{module_name}")
-            
-            # Har file me 'register_handlers' function dhundo
             if hasattr(module, "register_handlers"):
                 module.register_handlers(application)
                 print(f"  ✅ Loaded: {module_name}")
             else:
                 print(f"  ⚠️ Skipped: {module_name} (No 'register_handlers' found)")
-        
         except Exception as e:
             print(f"  ❌ Failed to load {module_name}: {e}")
 
@@ -95,23 +84,19 @@ def load_plugins(application: Application):
 async def on_startup(application: Application):
     print(f"🚀 {BOT_NAME} IS STARTING...")
     
-    # ✅ FIX: Music Assistant Start Logic Added Here
     print("🔵 Starting Music Assistant...")
     try:
         await start_music_worker()
     except Exception as e:
         print(f"❌ Assistant Start Failed: {e}")
 
-    # Logger Logic
     logger_id = get_logger_group()
     if logger_id:
         try:
             me = await application.bot.get_me()
             username = me.username
-            
             txt = f"""
 <blockquote><b>{BOT_NAME}ʙᴏᴛ active 🍭</b></blockquote>
-
 <blockquote>
 <b>🤖 ʙᴏᴛ ɴᴀᴍᴇ :</b> {BOT_NAME}
 <b>🆔 ʙᴏᴛ ɪᴅ :</b> <code>{me.id}</code>
@@ -122,7 +107,7 @@ async def on_startup(application: Application):
             print("✅ Startup message sent to Logger!")
         except Exception as e:
             print(f"⚠️ Failed to send startup message: {e}")
-            
+
 # --- SHOP MENU ---
 async def shop_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
@@ -135,16 +120,12 @@ async def shop_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = []
     for k, v in SHOP_ITEMS.items():
         kb.append([InlineKeyboardButton(f"{v['name']} - ₹{v['price']}", callback_data=f"buy_{k}_{uid}")])
-    
-    # Close button now points to back_home instead of close_help
     kb.append([InlineKeyboardButton("🔙 Back", callback_data="back_home")])
-    
     await msg_func("🛒 **VIP SHOP**\nBuy special titles here:", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
 
 async def redeem_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if not context.args: return await update.message.reply_text("⚠️ Usage: `/redeem CODE`")
-    
     code = context.args[0]
     data = codes_col.find_one({"code": code})
     if not data: return await update.message.reply_text("❌ Invalid Code!")
@@ -160,14 +141,12 @@ async def callback_handler(update, context):
     data = q.data
     uid = q.from_user.id
     
-    # Basic Close Handlers
     if data in ["close_log", "close_ping"]:
         try: await q.message.delete()
         except: pass
         return
 
-    # --- START MENU HANDLERS ---
-    
+    # Start Menu Handlers
     if data == "back_home":
         await q.answer()
         await start.start_callback(update, context)
@@ -187,18 +166,14 @@ async def callback_handler(update, context):
 
     if data == "open_ranking":
         await q.answer()
-        # Ensure leaderboard module has a way to handle callback edit or call it appropriately
         await leaderboard.user_leaderboard(update, context) 
         return
-
-    # Note: open_commands/help logic removed as per request to move to tools/help.py
 
     if data.startswith(("start_", "st_")):
         await start.start_callback(update, context)
         return
 
-    # --- MODULE HANDLERS ---
-
+    # Module Handlers
     if data.startswith("admin_"):
         await admin.admin_callback(update, context)
         return
@@ -337,13 +312,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- MAIN ENGINE ---
 def main():
     keep_alive()
-    
-    # 🔥 Added post_init=on_startup here
     app = Application.builder().token(TELEGRAM_TOKEN).post_init(on_startup).build()
     
-    # --- A. EXISTING HANDLERS (Hardcoded) ---
+    # --- A. EXISTING HANDLERS ---
     app.add_handler(CommandHandler("start", start.start))
-    # Removed hardcoded help handler as it is now in tools/help.py
     app.add_handler(CommandHandler("admin", admin.admin_panel))
     
     app.add_handler(CommandHandler("info", info.user_info))
@@ -394,18 +366,10 @@ def main():
     
     app.add_handler(MessageHandler(filters.Regex(r'(?i)^[\./]crank'), chatstat.show_leaderboard))
     
-    # Old hardcoded group tools logic. If you are using tools/admin.py, you can comment these out later.
-    app.add_handler(MessageHandler(filters.Regex(r'^[\./]id$'), grouptools.get_id))
-    app.add_handler(MessageHandler(filters.Regex(r'^[\./]warn$'), grouptools.warn_user))
-    app.add_handler(MessageHandler(filters.Regex(r'^[\./]mute$'), grouptools.mute_user))
-    app.add_handler(MessageHandler(filters.Regex(r'^[\./]unmute$'), grouptools.unmute_user))
-    app.add_handler(MessageHandler(filters.Regex(r'^[\./]ban$'), grouptools.ban_user))
-    app.add_handler(MessageHandler(filters.Regex(r'^[\./]unban$'), grouptools.unban_user))
-    app.add_handler(MessageHandler(filters.Regex(r'^[\./]kick$'), grouptools.kick_user))
-    app.add_handler(MessageHandler(filters.Regex(r'^[\./]pin$'), grouptools.pin_message))
+    # 🔥 REMOVED GROUPTOOLS HANDLERS (Since you deleted the file)
+    # The new admin.py will be loaded by load_plugins below
     
     # --- B. NEW MODULES (TOOLS FOLDER - AUTO LOAD) ---
-    # help.py, music.py, admin.py yahan se load honge
     load_plugins(app)
 
     # --- C. MESSAGE HANDLER (LAST PRIORITY) ---
@@ -416,4 +380,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-        
+                
