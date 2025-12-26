@@ -23,7 +23,7 @@ def get_automated_wish(wish_type):
     api_key = random.choice(available_keys)
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         prompt = (f"Act as Aniya (Cute Bestie). Write a short '{wish_type}' msg. Max 10 words.")
         response = model.generate_content(prompt, generation_config={"max_output_tokens": 40})
         return response.text.strip()
@@ -77,7 +77,7 @@ async def get_yuki_response(user_id, user_text, user_name, message_object):
         try:
             genai.configure(api_key=api_key)
             # Tokens increased to 100 for full sentences
-            model = genai.GenerativeModel('gemini-1.5-flash', generation_config={"max_output_tokens": 100, "temperature": 0.7})
+            model = genai.GenerativeModel('gemini-2.5-flash', generation_config={"max_output_tokens": 100, "temperature": 0.7})
             
             # Async Call
             response = await model.generate_content_async(full_prompt)
