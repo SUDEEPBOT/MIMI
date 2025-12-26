@@ -33,7 +33,8 @@ async def play_stream(chat_id, file_path, title, duration, user):
     """
     AudioPiped Version
     """
-    if is_active_chat(chat_id):
+    # ✅ FIX: Added 'await' here
+    if await is_active_chat(chat_id):
         position = await put_queue(chat_id, file_path, title, duration, user)
         return False, position
     else:
@@ -48,7 +49,8 @@ async def play_stream(chat_id, file_path, title, duration, user):
                 int(chat_id),
                 stream,
             )
-            add_active_chat(chat_id)
+            # ✅ FIX: Added 'await' here
+            await add_active_chat(chat_id)
             await put_queue(chat_id, file_path, title, duration, user)
             return True, 0
         except Exception as e:
@@ -80,12 +82,14 @@ async def stream_end_handler(client, update: Update):
         except Exception as e:
             print(f"❌ Auto-Play Error: {e}")
             await call_py.leave_group_call(chat_id)
-            remove_active_chat(chat_id)
+            # ✅ FIX: Added 'await' here
+            await remove_active_chat(chat_id)
             await clear_queue(chat_id)
     else:
         try:
             await call_py.leave_group_call(chat_id)
-            remove_active_chat(chat_id)
+            # ✅ FIX: Added 'await' here
+            await remove_active_chat(chat_id)
             await clear_queue(chat_id)
         except:
             pass
@@ -93,7 +97,8 @@ async def stream_end_handler(client, update: Update):
 async def stop_stream(chat_id):
     try:
         await call_py.leave_group_call(int(chat_id))
-        remove_active_chat(chat_id)
+        # ✅ FIX: Added 'await' here
+        await remove_active_chat(chat_id)
         await clear_queue(chat_id)
         return True
     except:
