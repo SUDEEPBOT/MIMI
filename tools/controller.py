@@ -1,13 +1,17 @@
+import asyncio
 from tools.youtube import YouTubeAPI
-from tools.stream import play_stream
+from tools.stream import play_stream, worker # ✅ Worker import kiya status check ke liye
 from tools.thumbnails import get_thumb
+# 🔥 Database functions import kiye
+from tools.database import get_db_queue
+from tools.queue import clear_queue 
 
 # Initialize YouTube
 YouTube = YouTubeAPI()
 
 async def process_stream(chat_id, user_name, query):
     """
-    Complete Flow: Search -> Download -> Thumbnail -> Stream/Queue
+    Complete Flow: Search -> VC Check -> Download -> Thumbnail -> Stream/Queue
     """
     
     # --- 1. SEARCHING ---
@@ -36,11 +40,31 @@ async def process_stream(chat_id, user_name, query):
     except Exception as e:
         return f"❌ Search Error: {e}", None
 
+    # --- 🔥 CRITICAL FIX: VC STATUS CHECK 🔥 ---
+    # Agar user ne VC off kar diya hai, lekin DB me queue hai, to usse clear karo
+    try:
+        queue = await get_db_queue(chat_id)
+        is_streaming = False
+        
+        # Check karo kya Pyrogram Call active hai?
+        try:
+            if chat_id in worker.active_calls:
+                is_streaming = True
+        except:
+            pass
+
+        # Agar Queue hai par Streaming nahi ho rahi -> Clear Queue (Reset)
+        if queue and not is_streaming:
+            await clear_queue(chat_id)
+            print(f"🧹 Queue Cleared for {chat_id} (VC was Closed)")
+            
+    except Exception as e:
+        print(f"VC Check Error: {e}")
+
     # --- 2. THUMBNAIL GENERATION ---
-    # Custom Thumbnail banao (Prince/Yukki Style)
     final_thumb = await get_thumb(vidid)
     if not final_thumb:
-        final_thumb = thumbnail # Fallback to original if generation fails
+        final_thumb = thumbnail 
 
     # --- 3. DOWNLOADING ---
     try:
@@ -53,24 +77,23 @@ async def process_stream(chat_id, user_name, query):
     except Exception as e:
         return f"❌ Download Error: {e}", None
 
-    # --- 4. PLAYING / QUEUING (🔥 FIXED HERE) ---
-    # ✅ FIX: Ab hum link aur final_thumb bhi pass kar rahe hain
-    # play_stream(chat_id, file, title, duration, user, link, thumbnail)
+    # --- 4. PLAYING / QUEUING ---
+    # Ab agar VC off tha, to queue clear ho chuka hoga aur ye song Play hoga (Queue nahi)
     status, position = await play_stream(
         chat_id, 
         file_path, 
         title, 
         duration, 
         user_name, 
-        link,        # ✅ Added Link
-        final_thumb  # ✅ Added Thumbnail
+        link,        
+        final_thumb  
     )
 
     # --- 5. RESULT ---
     response = {
         "title": title,
         "duration": duration,
-        "thumbnail": final_thumb, # Generated Path
+        "thumbnail": final_thumb, 
         "user": user_name,
         "link": link,
         "vidid": vidid,
