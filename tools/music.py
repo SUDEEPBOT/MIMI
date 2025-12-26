@@ -28,6 +28,18 @@ async def auto_delete_message(context, chat_id, message_id, delay=5):
     except:
         pass
 
+# --- THUMBNAIL VALIDATION HELPER ---
+def validate_thumbnail_url(url):
+    """Thumbnail URL ko validate aur fix karo"""
+    if not url or url == "" or url == "None" or url is None:
+        return None
+    
+    # Check if it's a valid URL
+    if url.startswith(('http://', 'https://')):
+        return url
+    
+    return None
+
 # --- PLAY COMMAND (/play) ---
 async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -80,12 +92,15 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    title = data["title"]
-    duration = data["duration"]
-    thumbnail = data["thumbnail"]
-    requested_by = data["user"]
-    link = data["link"]
+    title = data.get("title", "Unknown Title")
+    duration = data.get("duration", "0:00")
+    thumbnail = data.get("thumbnail", None)
+    requested_by = data.get("user", user.first_name)
+    link = data.get("link", "#")
     videoid = data.get("videoid", "unknown")
+    
+    # ✅ THUMBNAIL VALIDATION
+    valid_thumbnail = validate_thumbnail_url(thumbnail)
     
     # ✅ BUTTONS.PY का USE करें
     # Track selection buttons
@@ -99,7 +114,7 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     markup = InlineKeyboardMarkup(buttons)
 
-    if data["status"] is True:
+    if data.get("status") is True:
         text = f"""
 <blockquote><b>🎵 Streaming Started</b></blockquote>
 
@@ -131,15 +146,34 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         player_markup = InlineKeyboardMarkup(player_buttons)
         
-        # Main result message bhejo
-        result_msg = await context.bot.send_photo(
-            chat.id, 
-            photo=thumbnail, 
-            caption=text, 
-            reply_markup=markup,  # Track selection buttons
-            parse_mode=ParseMode.HTML,
-            has_spoiler=True
-        )
+        # Main result message bhejo - WITH OR WITHOUT PHOTO
+        if valid_thumbnail:
+            try:
+                result_msg = await context.bot.send_photo(
+                    chat.id, 
+                    photo=valid_thumbnail, 
+                    caption=text, 
+                    reply_markup=markup,  # Track selection buttons
+                    parse_mode=ParseMode.HTML,
+                    has_spoiler=True
+                )
+            except Exception as photo_error:
+                print(f"⚠️ Photo send error, sending text only: {photo_error}")
+                # Fallback to text message
+                result_msg = await context.bot.send_message(
+                    chat.id,
+                    text=text,
+                    reply_markup=markup,
+                    parse_mode=ParseMode.HTML
+                )
+        else:
+            # No thumbnail, send text only
+            result_msg = await context.bot.send_message(
+                chat.id,
+                text=text,
+                reply_markup=markup,
+                parse_mode=ParseMode.HTML
+            )
         
         # Player control message अलग से
         player_msg = await context.bot.send_message(
@@ -147,20 +181,9 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text="🎛 **Player Controls**",
             reply_markup=player_markup
         )
-        
-        # ✅ RESULT MESSAGES KO BHI AUTO DELETE KARNE KA OPTION
-        # (Optional: Agar aap chahte hain ki result bhi delete ho, toh ye uncomment karo)
-        # context.job_queue.run_once(
-        #     lambda ctx: auto_delete_message(ctx, chat.id, result_msg.message_id, 30),
-        #     when=30
-        # )
-        # context.job_queue.run_once(
-        #     lambda ctx: auto_delete_message(ctx, chat.id, player_msg.message_id, 30),
-        #     when=30
-        # )
 
-    elif data["status"] is False:
-        position = data["position"]
+    elif data.get("status") is False:
+        position = data.get("position", 1)
         text = f"""
 <blockquote><b>📝 Added to Queue</b></blockquote>
 
@@ -182,21 +205,32 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
         
-        # Result message bhejo
-        result_msg = await context.bot.send_photo(
-            chat.id, 
-            photo=thumbnail, 
-            caption=text, 
-            reply_markup=markup, 
-            parse_mode=ParseMode.HTML,
-            has_spoiler=True
-        )
-        
-        # ✅ Queue message bhi auto delete kar sakte hain (Optional)
-        # context.job_queue.run_once(
-        #     lambda ctx: auto_delete_message(ctx, chat.id, result_msg.message_id, 10),
-        #     when=10
-        # )
+        # Result message bhejo - WITH OR WITHOUT PHOTO
+        if valid_thumbnail:
+            try:
+                result_msg = await context.bot.send_photo(
+                    chat.id, 
+                    photo=valid_thumbnail, 
+                    caption=text, 
+                    reply_markup=markup, 
+                    parse_mode=ParseMode.HTML,
+                    has_spoiler=True
+                )
+            except Exception as photo_error:
+                print(f"⚠️ Photo send error: {photo_error}")
+                result_msg = await context.bot.send_message(
+                    chat.id,
+                    text=text,
+                    reply_markup=markup,
+                    parse_mode=ParseMode.HTML
+                )
+        else:
+            result_msg = await context.bot.send_message(
+                chat.id,
+                text=text,
+                reply_markup=markup,
+                parse_mode=ParseMode.HTML
+            )
     
     else:
         error_msg = "❌ **Error:** Assistant VC join nahi kar paya."
@@ -215,38 +249,40 @@ async def music_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     
     if data.startswith("ADMIN"):
         # ADMIN commands handle करें
-        _, action, chat_id = data.split("|")
-        
-        # Button click ke response ko bhi auto delete karo
-        response_text = ""
-        
-        if action == "Pause":
-            await pause_stream(int(chat_id))
-            response_text = f"⏸ **Paused** by {query.from_user.first_name}"
+        parts = data.split("|")
+        if len(parts) >= 3:
+            action = parts[1]
+            chat_id = parts[2]
             
-        elif action == "Resume":
-            await resume_stream(int(chat_id))
-            response_text = f"▶️ **Resumed** by {query.from_user.first_name}"
+            response_text = ""
             
-        elif action == "Skip":
-            await skip_stream(int(chat_id))
-            response_text = f"⏭ **Skipped** by {query.from_user.first_name}"
+            if action == "Pause":
+                success = await pause_stream(int(chat_id))
+                response_text = f"⏸ **Paused** by {query.from_user.first_name}" if success else "❌ Failed to pause"
+                
+            elif action == "Resume":
+                success = await resume_stream(int(chat_id))
+                response_text = f"▶️ **Resumed** by {query.from_user.first_name}" if success else "❌ Failed to resume"
+                
+            elif action == "Skip":
+                success, _ = await skip_stream(int(chat_id))
+                response_text = f"⏭ **Skipped** by {query.from_user.first_name}" if success else "❌ Failed to skip"
+                
+            elif action == "Stop":
+                success = await stop_stream(int(chat_id))
+                response_text = f"⏹ **Stopped** by {query.from_user.first_name}" if success else "❌ Failed to stop"
             
-        elif action == "Stop":
-            await stop_stream(int(chat_id))
-            response_text = f"⏹ **Stopped** by {query.from_user.first_name}"
-        
-        # Edit message aur delete job schedule karo
-        await query.edit_message_text(response_text)
-        
-        # Response ko bhi 3 seconds baad delete karo
-        context.job_queue.run_once(
-            lambda ctx: ctx.bot.delete_message(
-                chat_id=query.message.chat_id, 
-                message_id=query.message.message_id
-            ),
-            when=3
-        )
+            # Edit message aur delete job schedule karo
+            await query.edit_message_text(response_text)
+            
+            # Response ko bhi 3 seconds baad delete karo
+            context.job_queue.run_once(
+                lambda ctx: ctx.bot.delete_message(
+                    chat_id=query.message.chat_id, 
+                    message_id=query.message.message_id
+                ) if hasattr(ctx, 'bot') else None,
+                when=3
+            )
     
     elif data.startswith("MusicStream"):
         # Audio/Video stream selection
@@ -256,15 +292,21 @@ async def music_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             lambda ctx: ctx.bot.delete_message(
                 chat_id=query.message.chat_id, 
                 message_id=query.message.message_id
-            ),
+            ) if hasattr(ctx, 'bot') else None,
             when=3
         )
     
     elif data == "close":
-        await query.message.delete()
+        try:
+            await query.message.delete()
+        except:
+            pass
     
     elif data.startswith("forceclose"):
-        await query.message.delete()
+        try:
+            await query.message.delete()
+        except:
+            pass
 
 # --- OTHER COMMANDS (Ye bhi auto delete) ---
 async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -303,13 +345,18 @@ async def pause_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
     
     chat_id = update.effective_chat.id
-    await pause_stream(chat_id)
-    text = f"""
+    success = await pause_stream(chat_id)
+    
+    if success:
+        text = f"""
 <blockquote><b>⏸ Playback Paused</b></blockquote>
 <blockquote>Action by {update.effective_user.first_name}</blockquote>
 <blockquote>✨ Powered by <b>{OWNER_NAME}</b></blockquote>
 """
-    msg = await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+    else:
+        text = "❌ Failed to pause playback"
+        
+    msg = await update.message.reply_text(text, parse_mode=ParseMode.HTML if success else None)
     context.job_queue.run_once(
         lambda ctx: auto_delete_message(ctx, chat_id, msg.message_id, 5),
         when=5
@@ -322,13 +369,52 @@ async def resume_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
     
     chat_id = update.effective_chat.id
-    await resume_stream(chat_id)
-    text = f"""
+    success = await resume_stream(chat_id)
+    
+    if success:
+        text = f"""
 <blockquote><b>▶️ Playback Resumed</b></blockquote>
 <blockquote>Action by {update.effective_user.first_name}</blockquote>
 <blockquote>✨ Powered by <b>{OWNER_NAME}</b></blockquote>
 """
-    msg = await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+    else:
+        text = "❌ Failed to resume playback"
+        
+    msg = await update.message.reply_text(text, parse_mode=ParseMode.HTML if success else None)
+    context.job_queue.run_once(
+        lambda ctx: auto_delete_message(ctx, chat_id, msg.message_id, 5),
+        when=5
+    )
+
+async def skip_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await update.message.delete()
+    except:
+        pass
+    
+    chat_id = update.effective_chat.id
+    success, next_song = await skip_stream(chat_id)
+    
+    if success and next_song:
+        text = f"""
+<blockquote><b>⏭ Song Skipped</b></blockquote>
+<blockquote>Now playing: {next_song.get('title', 'Next Song')}</blockquote>
+<blockquote>Action by {update.effective_user.first_name}</blockquote>
+<blockquote>✨ Powered by <b>{OWNER_NAME}</b></blockquote>
+"""
+    elif success:
+        text = f"""
+<blockquote><b>⏭ Song Skipped</b></blockquote>
+<blockquote>Action by {update.effective_user.first_name}</blockquote>
+<blockquote>✨ Powered by <b>{OWNER_NAME}</b></blockquote>
+"""
+    else:
+        text = "❌ Failed to skip or queue is empty"
+    
+    msg = await update.message.reply_text(
+        text, 
+        parse_mode=ParseMode.HTML if success else None
+    )
     context.job_queue.run_once(
         lambda ctx: auto_delete_message(ctx, chat_id, msg.message_id, 5),
         when=5
