@@ -16,6 +16,9 @@ OWNER_USERNAME = "@Prince_Username"  # Apna Username yahan daalo (bina @ ke bhi 
 GROUP_NAME = "Prince Support"        # Apne Group ka naam
 GROUP_LINK = "https://t.me/Prince_Support" # Apne Group ka Link
 
+# config.py
+INSTAGRAM_LINK = "https://www.instagram.com/prince_bots" # Yahan apna link daal dena
+
 # --- FIX IS HERE ---
 # Humne BOT_TOKEN define kiya, aur TELEGRAM_TOKEN ko uska copy bana diya
 BOT_TOKEN = getenv("BOT_TOKEN") or getenv("TELEGRAM_TOKEN", "")
