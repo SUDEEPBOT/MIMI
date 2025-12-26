@@ -7,7 +7,8 @@ from telegram import Bot, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.constants import ParseMode
 
 # Configs
-from config import API_ID, API_HASH, SESSION, BOT_TOKEN, OWNER_NAME
+# 🔥 Note: LOG_GROUP_ID jarur add kar lena config.py mai
+from config import API_ID, API_HASH, SESSION, BOT_TOKEN, OWNER_NAME, LOG_GROUP_ID
 from tools.queue import put_queue, pop_queue, clear_queue
 from tools.database import is_active_chat, add_active_chat, remove_active_chat
 
@@ -27,15 +28,45 @@ worker = Client(
 
 call_py = PyTgCalls(worker)
 
-# 2. Main Bot (Message Manager) - Iska use hum auto-play message bhejne ke liye karenge
+# 2. Main Bot (Message Manager)
 main_bot = Bot(token=BOT_TOKEN)
 
+# --- 🔥 STARTUP LOGIC (UPDATED) ---
 async def start_music_worker():
     print("🔵 Starting Music Assistant (VIP Style)...")
     try:
         await worker.start()
         await call_py.start()
         print("✅ Assistant & PyTgCalls Started!")
+
+        # --- 1. SEND STARTUP MESSAGE TO LOG GROUP ---
+        try:
+            if LOG_GROUP_ID:
+                await worker.send_message(
+                    int(LOG_GROUP_ID),
+                    "<b>✅ Assistant Started Successfully!</b>\n\nI am online and ready to play music. 🎵"
+                )
+                print("✅ Log Message Sent!")
+        except Exception as e:
+            print(f"⚠️ Log Message Failed: {e}")
+
+        # --- 2. VC CHECK (JOIN & LEAVE) ---
+        # Note: Join karne ke liye ek dummy file honi chahiye (e.g., assets/startup.mp3)
+        # Agar file nahi hogi toh ye step skip ho jayega (Bot crash nahi karega)
+        try:
+            if LOG_GROUP_ID:
+                print("🔄 Checking VC Connectivity...")
+                # Yahan koi bhi choti mp3 file ka path de dena
+                await call_py.join_group_call(
+                    int(LOG_GROUP_ID),
+                    AudioPiped("./assets/startup.mp3", audio_parameters=HighQualityAudio())
+                )
+                await asyncio.sleep(5) # 5 Second wait
+                await call_py.leave_group_call(int(LOG_GROUP_ID))
+                print("✅ VC Check Passed (Joined & Left)!")
+        except Exception as e:
+            print(f"⚠️ VC Check Skipped (File missing or No Active VC): {e}")
+
     except Exception as e:
         print(f"❌ Assistant Error: {e}")
 
@@ -44,9 +75,7 @@ async def play_stream(chat_id, file_path, title, duration, user, link, thumbnail
     """
     Queue system ke sath AudioPiped Play
     """
-    # Agar chat already active hai, toh Queue mein daalo
     if await is_active_chat(chat_id):
-        # Note: put_queue ab Link aur Thumbnail bhi leta hai
         position = await put_queue(chat_id, file_path, title, duration, user, link, thumbnail)
         return False, position
     else:
@@ -79,7 +108,7 @@ async def stream_end_handler(client, update: Update):
         try:
             await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
         except:
-            pass # Message shayad pehle hi delete ho gaya ho
+            pass 
     
     # B. Queue se next song nikalo
     next_song = await pop_queue(chat_id)
@@ -133,12 +162,11 @@ async def stream_end_handler(client, update: Update):
                 chat_id,
                 photo=thumbnail,
                 caption=caption,
-                has_spoiler=True, # 🔥 Spoiler Logic
+                has_spoiler=True, 
                 reply_markup=InlineKeyboardMarkup(buttons),
                 parse_mode=ParseMode.HTML
             )
             
-            # ID Save karo agle deletion ke liye
             LAST_MSG_ID[chat_id] = msg.message_id
 
         except Exception as e:
@@ -153,16 +181,13 @@ async def skip_stream(chat_id):
     """
     Manually Next Song Play Karta Hai
     """
-    # Next song nikalo
     next_song = await pop_queue(chat_id)
 
     if next_song:
-        # Purana message uda do
         if chat_id in LAST_MSG_ID:
             try: await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
             except: pass
 
-        # Data Prepare
         file = next_song["file"]
         title = next_song["title"]
         link = next_song["link"]
@@ -171,17 +196,14 @@ async def skip_stream(chat_id):
         user = next_song["by"]
 
         try:
-            # Stream Change
             stream = AudioPiped(file, audio_parameters=HighQualityAudio())
             await call_py.change_stream(chat_id, stream)
             
-            # Queue Message Delete
             queue_key = f"{chat_id}-{title}"
             if queue_key in QUEUE_MSG_ID:
                 try: await main_bot.delete_message(chat_id, QUEUE_MSG_ID[queue_key])
                 except: pass
 
-            # New Message Send
             buttons = [
                 [
                     InlineKeyboardButton("II", callback_data="music_pause"),
@@ -206,25 +228,21 @@ async def skip_stream(chat_id):
                 parse_mode=ParseMode.HTML
             )
             LAST_MSG_ID[chat_id] = msg.message_id
-            return True # Skip Success
+            return True 
         except Exception as e:
             print(f"Skip Error: {e}")
             return False
     else:
-        # Agar koi next song nahi hai, toh stop kar do
         await stop_stream(chat_id)
         return False
 
 # --- 4. STOP LOGIC ---
 async def stop_stream(chat_id):
     try:
-        # VC se bahar
         await call_py.leave_group_call(int(chat_id))
-        # Database saaf
         await remove_active_chat(chat_id)
         await clear_queue(chat_id)
         
-        # Last message delete
         if chat_id in LAST_MSG_ID:
             try: await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
             except: pass
@@ -247,4 +265,4 @@ async def resume_stream(chat_id):
         return True
     except:
         return False
-
+        
