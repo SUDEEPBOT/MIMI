@@ -22,7 +22,7 @@ from tts import generate_voice
 # ✅ Music Assistant Import
 from tools.stream import start_music_worker
 
-# MODULES (Removed 'grouptools' from here)
+# MODULES (Removed 'grouptools')
 import admin, start, group, leaderboard, pay, bet, wordseek, chatstat, logger, events, info, tictactoe, couple
 import livetime  
 import dmspam 
@@ -289,7 +289,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         wants_voice = any(v in text.lower() for v in voice_triggers)
 
         await context.bot.send_chat_action(chat_id=chat.id, action="typing")
-        ai_reply = get_yuki_response(user.id, text, user.first_name)
+        
+        # 🔥 YAHAN CHANGE HAI (ASYNC CALL + REACTION OBJECT PASSED)
+        # Ab AI Reaction + Text dono dega
+        ai_reply = await get_yuki_response(user.id, text, user.first_name, update.message)
 
         if wants_voice:
             await context.bot.send_chat_action(chat_id=chat.id, action="record_voice")
@@ -366,9 +369,6 @@ def main():
     
     app.add_handler(MessageHandler(filters.Regex(r'(?i)^[\./]crank'), chatstat.show_leaderboard))
     
-    # 🔥 REMOVED GROUPTOOLS HANDLERS (Since you deleted the file)
-    # The new admin.py will be loaded by load_plugins below
-    
     # --- B. NEW MODULES (TOOLS FOLDER - AUTO LOAD) ---
     load_plugins(app)
 
@@ -380,4 +380,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-                
+    
