@@ -1,37 +1,47 @@
 import asyncio
 from tools.youtube import YouTubeAPI
-from tools.stream import play_stream, worker # ✅ Worker import kiya status check ke liye
+from tools.stream import play_stream, worker 
 from tools.thumbnails import get_thumb
-# 🔥 Database functions import kiye
 from tools.database import get_db_queue
-from tools.queue import clear_queue 
+from tools.queue import clear_queue
+# 🔥 IMP: Humne jo async downloader banaya tha, usse import karo
+from tools.downloader import download 
 
 # Initialize YouTube
 YouTube = YouTubeAPI()
 
 async def process_stream(chat_id, user_name, query):
     """
-    Complete Flow: Search -> VC Check -> Download -> Thumbnail -> Stream/Queue
+    Flow: Search -> Status Check -> Thumbnail -> Async Download -> Stream
     """
     
     # --- 1. SEARCHING ---
     try:
-        # Link hai ya Name? check karke details nikalo
         if "youtube.com" in query or "youtu.be" in query:
-             # Agar Link hai
-             title = await YouTube.title(query)
-             duration = await YouTube.duration(query)
-             thumbnail = await YouTube.thumbnail(query)
+             # Link Handling
              if "v=" in query:
                  vidid = query.split("v=")[-1].split("&")[0]
              else:
                  vidid = query.split("/")[-1]
-             link = query
+             
+             # Details fetch karo (Fast)
+             try:
+                 title = await YouTube.title(query)
+                 duration = await YouTube.duration(query)
+                 thumbnail = await YouTube.thumbnail(query)
+                 link = query
+             except:
+                 # Fallback logic if direct fetch fails
+                 res, vidid = await YouTube.track(query)
+                 title = res["title"]
+                 duration = res["duration_min"]
+                 thumbnail = res["thumb"]
+                 link = res["link"]
         else:
-            # Agar Name hai (Search)
+            # Name Search
             result, vidid = await YouTube.track(query)
             if not result:
-                return "❌ Song not found.", None
+                return "❌ Song not found on YouTube.", None
             title = result["title"]
             duration = result["duration_min"]
             thumbnail = result["thumb"]
@@ -40,45 +50,42 @@ async def process_stream(chat_id, user_name, query):
     except Exception as e:
         return f"❌ Search Error: {e}", None
 
-    # --- 🔥 CRITICAL FIX: VC STATUS CHECK 🔥 ---
-    # Agar user ne VC off kar diya hai, lekin DB me queue hai, to usse clear karo
+    # --- 🔥 2. GHOST QUEUE CLEANER (Fix for VC Off Bug) ---
+    # Logic: Agar PyTgCalls actually connected nahi hai, lekin Database me queue hai,
+    # toh purana queue saaf kar do taaki ye naya gaana 1st position par aaye.
     try:
-        queue = await get_db_queue(chat_id)
-        is_streaming = False
-        
-        # Check karo kya Pyrogram Call active hai?
+        is_actually_connected = False
         try:
-            if chat_id in worker.active_calls:
-                is_streaming = True
-        except:
-            pass
+            # PyTgCalls V3 Compatible Check
+            for call in worker.active_calls:
+                if call.chat_id == chat_id:
+                    is_actually_connected = True
+                    break
+        except: pass
 
-        # Agar Queue hai par Streaming nahi ho rahi -> Clear Queue (Reset)
-        if queue and not is_streaming:
+        # Agar Bot VC me nahi hai, toh Queue Clear karo
+        if not is_actually_connected:
             await clear_queue(chat_id)
-            print(f"🧹 Queue Cleared for {chat_id} (VC was Closed)")
             
     except Exception as e:
-        print(f"VC Check Error: {e}")
+        print(f"VC Status Check Error: {e}")
 
-    # --- 2. THUMBNAIL GENERATION ---
+    # --- 3. THUMBNAIL ---
     final_thumb = await get_thumb(vidid)
     if not final_thumb:
         final_thumb = thumbnail 
 
-    # --- 3. DOWNLOADING ---
+    # --- 4. ASYNC DOWNLOADING (Anti-Freeze) ---
+    # 🔥 Humara naya downloader use kar rahe hain
     try:
-        file_path, direct = await YouTube.download(
-            link, 
-            mystic=None,
-            title=title,
-            format_id="bestaudio"
-        )
+        file_path = await download(link)
+        if not file_path:
+            return "❌ Download Failed (File not found)", None
     except Exception as e:
         return f"❌ Download Error: {e}", None
 
-    # --- 4. PLAYING / QUEUING ---
-    # Ab agar VC off tha, to queue clear ho chuka hoga aur ye song Play hoga (Queue nahi)
+    # --- 5. PLAYING / QUEUING ---
+    # play_stream ab khud decide karega ki Join karna hai ya Queue
     status, position = await play_stream(
         chat_id, 
         file_path, 
@@ -89,7 +96,7 @@ async def process_stream(chat_id, user_name, query):
         final_thumb  
     )
 
-    # --- 5. RESULT ---
+    # --- 6. RESULT RETURN ---
     response = {
         "title": title,
         "duration": duration,
@@ -97,9 +104,9 @@ async def process_stream(chat_id, user_name, query):
         "user": user_name,
         "link": link,
         "vidid": vidid,
-        "status": status,    # True (Playing) / False (Queued)
-        "position": position # Queue Number
+        "status": status,    # True = Now Playing, False = Queued
+        "position": position 
     }
     
     return None, response
-    
+                 
