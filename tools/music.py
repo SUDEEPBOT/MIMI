@@ -55,7 +55,7 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 1. Searching Message
     status_msg = await context.bot.send_message(
         chat.id,
-        f"<blockquote>🔍 <b>sᴇᴀʀᴄʜɪɴɢ...</b>\n<code>{query}</code></blockquote>",
+        f"🫀",
         parse_mode=ParseMode.HTML
     )
     await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
@@ -154,11 +154,10 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         caption = f"""
 <blockquote><b>✅ sᴛᴀʀᴛᴇᴅ sᴛʀᴇᴀᴍɪɴɢ</b></blockquote>
 
-<blockquote><b>🎸 ᴛɪᴛʟᴇ :</b> <a href="{link}">{safe_title}</a>
-<b>⏳ ᴅᴜʀᴀᴛɪᴏɴ :</b> <code>{duration}</code>
-<b>👤 ʀᴇǫᴜᴇsᴛᴇᴅ ʙʏ :</b> {safe_user}</blockquote>
-
-<blockquote><b>⚡ ᴘᴏᴡᴇʀᴇᴅ ʙʏ :</b> {OWNER_NAME}</blockquote>
+<blockquote><b>🫀ᴛɪᴛʟᴇ :</b> <a href="{link}">{safe_title}</a>
+<b>🍁 ᴅᴜʀᴀᴛɪᴏɴ :</b> <code>{duration}</code>
+<b>🫧 ʀᴇǫᴜᴇsᴛᴇᴅ ʙʏ :</b> {safe_user}</blockquote>
+<blockquote><b>🍫ᴘᴏᴡᴇʀᴇᴅ ʙʏ :</b> {OWNER_NAME}</blockquote>
 """
         try:
             msg = await context.bot.send_photo(chat.id, photo=img_url, caption=caption, has_spoiler=True, reply_markup=markup, parse_mode=ParseMode.HTML)
@@ -172,9 +171,10 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 <blockquote><b>📝 ᴀᴅᴅᴇᴅ ᴛᴏ ǫᴜᴇᴜᴇ</b></blockquote>
 
 <blockquote><b>🎸 ᴛɪᴛʟᴇ :</b> <a href="{link}">{safe_title}</a>
-<b>🔢 ᴘᴏsɪᴛɪᴏɴ :</b> <code>#{data['position']}</code>
-<b>⏳ ᴅᴜʀᴀᴛɪᴏɴ :</b> <code>{duration}</code>
-<b>👤 ʀᴇǫᴜᴇsᴛᴇᴅ ʙʏ :</b> {safe_user}</blockquote>
+<b>🍫 ᴘᴏsɪᴛɪᴏɴ :</b> <code>#{data['position']}</code>
+<b>🍁 ᴅᴜʀᴀᴛɪᴏɴ :</b> <code>{duration}</code>
+<b>🫧 ʀᴇǫᴜᴇsᴛᴇᴅ ʙʏ :</b> {safe_user}</blockquote>
+<blockquote><b>🍫ᴘᴏᴡᴇʀᴇᴅ ʙʏ :</b> {OWNER_NAME}</blockquote>
 """
         q_msg = await context.bot.send_photo(chat.id, photo=img_url, caption=caption, has_spoiler=True, reply_markup=markup, parse_mode=ParseMode.HTML)
         key = f"{chat.id}-{safe_title}"
