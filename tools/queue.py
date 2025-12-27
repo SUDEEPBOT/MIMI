@@ -6,10 +6,8 @@ QUEUE_LIMIT = 50
 
 async def put_queue(chat_id, file, title, duration, user, link, thumbnail, stream_type="audio"):
     """
-    Song ko queue mein add karta hai (With Thumbnail & Link support).
+    Song ko queue mein add karta hai.
     """
-    
-    # 🔒 SAFETY: Check karo file path sahi hai ya nahi
     if not isinstance(file, str):
         print(f"❌ Queue Error: File path text nahi hai! ({type(file)})")
         return {"error": "File Error"}
@@ -19,86 +17,63 @@ async def put_queue(chat_id, file, title, duration, user, link, thumbnail, strea
     if len(queue) >= QUEUE_LIMIT:
         return {"error": "Queue Full"}
 
-    # 🔥 IMPORTANT: Link aur Thumbnail bhi save kar rahe hain ab
     song = {
         "title": title,
         "file": str(file),
         "duration": duration,
         "by": user,
-        "link": link,          # ✅ Added for Next Song
-        "thumbnail": thumbnail, # ✅ Added for Next Song
+        "link": link,
+        "thumbnail": thumbnail,
         "streamtype": stream_type,
         "played": 0,
     }
 
     queue.append(song)
-
     await save_db_queue(chat_id, queue)
 
+    # Position return karo
     return len(queue) - 1
 
-async def get_current_song(chat_id):
-    """
-    CURRENT song nikalta hai (played wala) - Auto-play ke liye
-    """
-    queue = await get_db_queue(chat_id)
-    
-    if not queue:
-        return None
-    
-    # Current song (pehla wala) return karo
-    current = queue[0]
-    
-    # Safety Check
-    if not isinstance(current.get("file"), str):
-        print("❌ Queue Corrupted: Current song file path missing.")
-        return None
-    
-    return current
 
 async def pop_queue(chat_id):
     """
-    Sirf current song hataata hai aur database update karta hai.
-    Next song return NAHI karta.
+    Current song (Index 0) ko delete karta hai aur NEXT SONG return karta hai.
     """
     queue = await get_db_queue(chat_id)
 
     if not queue:
         return None
 
-    # Current song remove karo
-    removed_song = queue.pop(0)
+    # 1. Jo baj raha tha (Index 0) usse remove karo
+    queue.pop(0)
 
-    # Database update karo
+    # 2. Database update karo
     await save_db_queue(chat_id, queue)
-    
-    return removed_song  # Removed song ko return karo (info ke liye)
 
-async def get_next_song(chat_id):
-    """
-    NEXT song (queue mein dusra) return karta hai BINA remove kiye.
-    """
-    queue = await get_db_queue(chat_id)
-    
-    if len(queue) > 1:
-        next_song = queue[1]  # Second item (index 1)
+    # 3. Ab check karo kya koi aur gaana bacha hai?
+    # Agar haan, toh wo ab Index 0 par aa gaya hoga. Wahi Next Song hai.
+    if queue:
+        next_song = queue[0]
         
         # Safety Check
-        if not isinstance(next_song.get("file"), str):
-            print("❌ Queue Corrupted: Next song file path missing.")
+        if "file" not in next_song:
+            print("❌ Queue Corrupted: Next song data incomplete.")
             return None
             
         return next_song
-    
+
     return None
 
 async def get_queue(chat_id):
+    """
+    Puri list return karta hai.
+    """
     return await get_db_queue(chat_id)
 
 async def clear_queue(chat_id):
     """
-    Chupchap database se queue saaf kar dega.
-    (Koi message nahi bhejega)
+    Database se queue saaf karta hai.
     """
     await clear_db_queue(chat_id)
     print(f"🧹 Queue Cleared Silently for {chat_id}")
+    
